@@ -5,5 +5,5 @@ __pycache__/
 venv/
 *.pyc
 data/*.cache
+data/local_corpus.jsonl
 models/
-

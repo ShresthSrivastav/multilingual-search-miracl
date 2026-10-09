@@ -58,13 +58,21 @@ Try the provided example queries or enter a query in any of the four supported l
 
 ## Refresh the MIRACL sample
 
-The checked-in corpus is intentionally small. To download a new sample from the official MIRACL corpus:
+The checked-in corpus is intentionally small for Streamlit Cloud. To download a medium cloud sample:
 
 ```bash
-python scripts/download_sample.py --languages en hi es ar --per-language 50
+python scripts/download_sample.py --profile cloud --languages en hi es ar --per-language 50
 ```
 
-The script uses the Hugging Face dataset-row API, so it does not need to download the complete multi-gigabyte corpus. The generated JSONL file replaces `data/sample_corpus.jsonl`.
+For a larger local experiment, download 1,000 passages per language into the ignored local-only corpus:
+
+```bash
+python scripts/download_sample.py --profile local
+$env:MIRACL_CORPUS_PATH = "data/local_corpus.jsonl"  # PowerShell
+python -m streamlit run app.py
+```
+
+On macOS/Linux, use `export MIRACL_CORPUS_PATH=data/local_corpus.jsonl`. The script uses the Hugging Face dataset-row API in batches, so it does not download the complete multi-gigabyte corpus. The cloud profile writes `data/sample_corpus.jsonl`; the local profile writes `data/local_corpus.jsonl`, which is excluded from GitHub.
 
 ## Evaluate retrieval
 

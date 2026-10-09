@@ -1,6 +1,7 @@
 """Streamlit UI for the multilingual MIRACL semantic search project."""
 
 from pathlib import Path
+import os
 
 import streamlit as st
 from sentence_transformers import SentenceTransformer
@@ -9,7 +10,8 @@ from search_engine import SUPPORTED_LANGUAGES, Document, filter_documents, keywo
 
 
 ROOT = Path(__file__).parent
-CORPUS_PATH = ROOT / "data" / "sample_corpus.jsonl"
+configured_corpus = Path(os.getenv("MIRACL_CORPUS_PATH", "data/sample_corpus.jsonl"))
+CORPUS_PATH = configured_corpus if configured_corpus.is_absolute() else ROOT / configured_corpus
 MODEL_NAME = "intfloat/multilingual-e5-small"
 
 
@@ -57,7 +59,7 @@ with st.sidebar:
     search_method = st.selectbox("Search method", ["Semantic (multilingual E5)", "Keyword baseline"])
     st.divider()
     st.markdown("**Corpus**")
-    st.write(f"{len(all_documents)} sample passages")
+    st.write(f"{len(all_documents):,} passages ({CORPUS_PATH.name})")
     st.write("English · Hindi · Spanish · Arabic")
     st.markdown("[Refresh the sample](https://huggingface.co/datasets/miracl/miracl-corpus)")
 
