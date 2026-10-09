@@ -26,6 +26,7 @@ ROOT = Path(__file__).parent
 configured_corpus = Path(os.getenv("MIRACL_CORPUS_PATH", "data/sample_corpus.jsonl"))
 CORPUS_PATH = configured_corpus if configured_corpus.is_absolute() else ROOT / configured_corpus
 MODEL_NAME = "intfloat/multilingual-e5-small"
+EVALUATION_SNAPSHOT_PATH = ROOT / "data" / "evaluation_snapshot.json"
 
 
 @st.cache_resource(show_spinner="Loading multilingual embedding model...")
@@ -107,6 +108,26 @@ def count_jsonl(path: Path) -> int:
         return sum(1 for line in handle if line.strip())
 
 
+def load_evaluation_snapshot() -> dict:
+    """Load checked-in metrics so the Analysis tab is useful immediately."""
+    if not EVALUATION_SNAPSHOT_PATH.exists():
+        return {}
+    try:
+        with EVALUATION_SNAPSHOT_PATH.open(encoding="utf-8") as handle:
+            return json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def corpus_profile(path: Path) -> str:
+    """Return the name used by the stored evaluation profile."""
+    if path.name == "local_corpus.jsonl":
+        return "local"
+    if path.name == "sample_corpus.jsonl":
+        return "cloud"
+    return "other"
+
+
 st.set_page_config(page_title="MIRACL Multilingual Search", layout="wide")
 st.title("Multilingual MIRACL Search")
 st.caption("Semantic retrieval over MIRACL passages using multilingual-e5-small. Results are ranked evidence, not unsupported generated answers.")
@@ -181,15 +202,24 @@ with analysis_tab:
     st.table(language_rows)
 
     st.subheader("Evaluation")
-    st.write("The demo evaluation compares semantic E5 retrieval with the keyword baseline on the bundled query set.")
-    if st.button("Run demo evaluation"):
-        evaluation = demo_evaluation(load_model(), tuple(all_documents))
-        if evaluation:
-            st.table(evaluation)
-        else:
-            st.info("No evaluation queries are available.")
+    st.write("The saved evaluation below is shown automatically; no button is required to view the project results.")
+    snapshot = load_evaluation_snapshot()
+    profile = corpus_profile(CORPUS_PATH)
+    snapshot_rows = snapshot.get("profiles", {}).get(profile, [])
+    if snapshot_rows:
+        st.table(snapshot_rows)
+        st.caption(snapshot.get("note", "These metrics were calculated with the bundled evaluation queries."))
     else:
-        st.info("Click Run demo evaluation to calculate Recall@5 and MRR@10.")
+        st.info("No saved metrics are available for this corpus profile. Use the optional live evaluation below.")
+
+    with st.expander("Optional: recalculate evaluation for the active corpus"):
+        st.caption("This loads the embedding model and may take a little time on CPU.")
+        if st.button("Recalculate live evaluation"):
+            evaluation = demo_evaluation(load_model(), tuple(all_documents))
+            if evaluation:
+                st.table(evaluation)
+            else:
+                st.info("No evaluation queries are available.")
 
     topics_path = ROOT / "data" / "miracl_dev_topics.jsonl"
     qrels_path = ROOT / "data" / "miracl_dev_qrels.jsonl"
@@ -199,6 +229,9 @@ with analysis_tab:
     st.code("python scripts/download_miracl_dev.py\npython scripts/evaluate_official.py --max-queries 100")
 
     st.subheader("Runtime")
+    st.write(f"Active corpus: {CORPUS_PATH}")
+    st.write("Cloud default: data/sample_corpus.jsonl | Local demo: data/local_corpus.jsonl")
+    st.write("Full MIRACL shards: downloaded separately under data/miracl_full; not loaded by this lightweight app")
     st.write(f"Embedding model: {MODEL_NAME}")
     st.write("Inference backend: Sentence Transformers / PyTorch")
     st.write("Ollama: not used by this project")

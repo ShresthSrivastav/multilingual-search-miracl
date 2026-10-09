@@ -60,7 +60,7 @@ If the `streamlit` command is already mapped to the active virtual environment, 
 
 Try the provided example queries or enter a query in any of the four supported languages. Automatic language mode detects English, Hindi, Spanish, or Arabic and searches that language first; choose All languages for cross-language retrieval. The model encodes queries with the `query: ` prefix and passages with the `passage: ` prefix because this is the format used during E5 training.
 
-The Analysis tab shows passage/article counts by language, runs the bundled semantic-vs-keyword evaluation, displays official MIRACL file counts, and documents the runtime. The project does not use Ollama; it uses Sentence Transformers with PyTorch and the multilingual E5 model.
+The Analysis tab shows passage/article counts by language, automatically displays the saved semantic-vs-keyword evaluation snapshot, offers optional live recalculation, displays official MIRACL file counts, and documents the runtime. The project does not use Ollama; it uses Sentence Transformers with PyTorch and the multilingual E5 model.
 
 ## Refresh the MIRACL sample
 
@@ -94,7 +94,7 @@ This stores the compressed shards under `data/miracl_full/`, which is ignored by
 python scripts/evaluate.py
 ```
 
-The evaluation file contains four demonstration queries and their relevant document IDs. The script compares semantic retrieval with the keyword baseline and prints Recall@5, MRR@10, and the number of evaluation queries.
+The evaluation file contains four demonstration queries and their relevant document IDs. The script compares semantic retrieval with the keyword baseline and prints Recall@5, MRR@10, and the number of evaluation queries. The app displays a checked-in snapshot of these metrics immediately; live recalculation remains available in the Analysis tab.
 
 ## Evaluate with official MIRACL development data
 
