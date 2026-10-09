@@ -5,7 +5,7 @@ from pathlib import Path
 import streamlit as st
 from sentence_transformers import SentenceTransformer
 
-from search_engine import SUPPORTED_LANGUAGES, Document, filter_documents, load_documents, rank_embeddings
+from search_engine import SUPPORTED_LANGUAGES, Document, filter_documents, keyword_rank, load_documents, rank_embeddings
 
 
 ROOT = Path(__file__).parent
@@ -32,6 +32,12 @@ def search(model: SentenceTransformer, documents: list[Document], query: str, to
     return [(documents[index], score) for index, score in rank_embeddings(query_embedding, embeddings, top_k)]
 
 
+def keyword_search(documents: list[Document], query: str, top_k: int):
+    if not query.strip():
+        return []
+    return [(documents[index], score) for index, score in keyword_rank(query, documents, top_k)]
+
+
 st.set_page_config(page_title="MIRACL Multilingual Search", page_icon="🌍", layout="wide")
 st.title("🌍 Multilingual MIRACL Search")
 st.caption("Semantic search over a small MIRACL-derived corpus using multilingual-e5-small.")
@@ -48,6 +54,7 @@ with st.sidebar:
     selected_label = st.selectbox("Language", list(language_options))
     selected_language = language_options[selected_label]
     top_k = st.slider("Results to show", min_value=1, max_value=10, value=5)
+    search_method = st.selectbox("Search method", ["Semantic (multilingual E5)", "Keyword baseline"])
     st.divider()
     st.markdown("**Corpus**")
     st.write(f"{len(all_documents)} sample passages")
@@ -67,8 +74,10 @@ query = st.text_input("Enter a search query", value=default_query, placeholder="
 
 if query.strip():
     with st.spinner("Searching…"):
-        model = load_model()
-        results = search(model, documents, query, top_k)
+        if search_method == "Semantic (multilingual E5)":
+            results = search(load_model(), documents, query, top_k)
+        else:
+            results = keyword_search(documents, query, top_k)
     st.subheader(f"Top {len(results)} results")
     if not results:
         st.info("No matching documents were found.")
@@ -79,4 +88,3 @@ if query.strip():
         st.divider()
 else:
     st.info("Enter a query or choose an example to begin.")
-

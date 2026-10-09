@@ -7,6 +7,7 @@ A college-level semantic search project built with Python, Streamlit, NumPy, and
 - Cross-language semantic retrieval using `intfloat/multilingual-e5-small`
 - Language filtering and configurable top-k results
 - Ranked results with cosine similarity scores
+- Keyword baseline for an explainable comparison
 - Reproducible sampler for the official MIRACL corpus
 - Recall@5 and MRR@10 evaluation script
 - Plain unit tests for the ranking and filtering logic
@@ -71,7 +72,7 @@ The script uses the Hugging Face dataset-row API, so it does not need to downloa
 python scripts/evaluate.py
 ```
 
-The evaluation file contains four demonstration queries and their relevant document IDs. The script prints Recall@5, MRR@10, and the number of evaluation queries.
+The evaluation file contains four demonstration queries and their relevant document IDs. The script compares semantic retrieval with the keyword baseline and prints Recall@5, MRR@10, and the number of evaluation queries.
 
 ## Run tests
 
@@ -82,9 +83,9 @@ python -m unittest discover -s tests -p "test_*.py"
 ## Architecture
 
 1. The corpus loader reads validated JSONL records.
-2. The E5 model converts each passage into a normalized vector.
-3. A query is converted into a normalized query vector.
-4. NumPy computes cosine similarity between the query and candidate passages.
+2. The E5 model converts each passage into a normalized vector, or the keyword baseline builds TF-IDF-style token vectors.
+3. A query is converted into a normalized query vector or token vector.
+4. The selected ranker scores and sorts candidate passages.
 5. Streamlit displays the highest-scoring results.
 
 For a large production corpus, replace the in-memory NumPy ranking step with an approximate nearest-neighbor index such as FAISS or a vector database.

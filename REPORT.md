@@ -11,6 +11,7 @@ This project implements a multilingual semantic search system using a sample of 
 3. Demonstrate ranking with cosine similarity.
 4. Evaluate retrieval with Recall@5 and MRR@10.
 5. Provide a reproducible and explainable college-level implementation.
+6. Compare semantic retrieval with a traditional keyword baseline.
 
 ## 2. Dataset
 
@@ -38,9 +39,11 @@ query: <user query>
 
 For every query, the application computes the dot product between the normalized query vector and normalized passage vectors. With normalized vectors, the dot product is equivalent to cosine similarity. Results are sorted from highest to lowest score.
 
+The project also includes a dependency-free TF-IDF-style keyword baseline. It uses Unicode-aware tokenization, term frequency, inverse document frequency, and cosine similarity. This provides a simple traditional baseline for comparison in the report and presentation.
+
 ### Interface
 
-The Streamlit interface provides a language filter, top-k control, example queries, and ranked result cards. Expensive model loading and corpus encoding are cached.
+The Streamlit interface provides a language filter, top-k control, search-method selector, example queries, and ranked result cards. Expensive model loading and corpus encoding are cached.
 
 ## 4. System Design
 
@@ -58,7 +61,7 @@ Ranked MIRACL passages
 
 ## 5. Evaluation
 
-The demonstration evaluation set contains one query per supported language. The relevant document IDs are stored in `data/eval_queries.jsonl`.
+The demonstration evaluation set contains one query per supported language. The relevant document IDs are stored in `data/eval_queries.jsonl`. The evaluation compares multilingual E5 semantic search against the keyword baseline.
 
 Run:
 
@@ -68,10 +71,10 @@ python scripts/evaluate.py
 
 Record the generated values here before submission:
 
-| Metric | Value |
-|---|---:|
-| Recall@5 | Run evaluation script |
-| MRR@10 | Run evaluation script |
+| Method | Recall@5 | MRR@10 |
+|---|---:|---:|
+| Multilingual E5 semantic search | 1.000 | 0.875 |
+| Keyword baseline | 1.000 | 0.633 |
 
 The evaluation sample is intended to demonstrate the metric pipeline, not to represent a statistically complete MIRACL benchmark.
 
@@ -82,6 +85,7 @@ The evaluation sample is intended to demonstrate the metric pipeline, not to rep
 - Retrieval quality depends on the pretrained embedding model.
 - The system retrieves passages but does not generate answers or citations.
 - The model requires an initial online download.
+- The comparison set is intentionally small and is not a full MIRACL benchmark.
 
 ## 7. Future Scope
 
@@ -95,4 +99,3 @@ The evaluation sample is intended to demonstrate the metric pipeline, not to rep
 ## 8. Conclusion
 
 The project demonstrates the complete pipeline of a multilingual semantic search system: data loading, multilingual representation, similarity-based ranking, web presentation, and metric evaluation. Its small design makes the core method easy to understand while leaving clear paths for scaling.
-

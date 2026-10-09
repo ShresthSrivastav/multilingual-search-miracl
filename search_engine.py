@@ -4,13 +4,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from collections import Counter
 import json
+import math
+import re
 from typing import Iterable, Sequence
 
 import numpy as np
 
 
 SUPPORTED_LANGUAGES = {"en": "English", "hi": "Hindi", "es": "Spanish", "ar": "Arabic"}
+TOKEN_PATTERN = re.compile(r"\w+", re.UNICODE)
 
 
 @dataclass(frozen=True)
@@ -76,6 +80,35 @@ def filter_documents(documents: Sequence[Document], language: str) -> list[Docum
     return [document for document in documents if document.language == language]
 
 
+def keyword_rank(query: str, documents: Sequence[Document], top_k: int = 5) -> list[tuple[int, float]]:
+    """Rank documents with a small TF-IDF cosine baseline, without extra dependencies."""
+    if top_k < 1:
+        raise ValueError("top_k must be at least 1")
+    query_terms = Counter(TOKEN_PATTERN.findall(query.casefold()))
+    if not query_terms or not documents:
+        return []
+
+    document_terms = [Counter(TOKEN_PATTERN.findall(f"{document.title} {document.text}".casefold())) for document in documents]
+    document_frequency = Counter(term for terms in document_terms for term in terms)
+    total_documents = len(document_terms)
+
+    def weight(term: str, frequency: int) -> float:
+        inverse_document_frequency = math.log((1 + total_documents) / (1 + document_frequency[term])) + 1.0
+        return (1.0 + math.log(frequency)) * inverse_document_frequency
+
+    query_vector = {term: weight(term, frequency) for term, frequency in query_terms.items()}
+    query_norm = math.sqrt(sum(value * value for value in query_vector.values()))
+    scores: list[tuple[int, float]] = []
+    for index, terms in enumerate(document_terms):
+        document_vector = {term: weight(term, frequency) for term, frequency in terms.items() if term in query_vector}
+        if not document_vector:
+            continue
+        dot_product = sum(query_vector[term] * value for term, value in document_vector.items())
+        document_norm = math.sqrt(sum(value * value for value in document_vector.values()))
+        scores.append((index, dot_product / (query_norm * document_norm)))
+    return sorted(scores, key=lambda item: (-item[1], item[0]))[:top_k]
+
+
 def recall_at_k(results: Sequence[str], relevant: set[str], k: int) -> float:
     if not relevant:
         return 0.0
@@ -87,4 +120,3 @@ def reciprocal_rank(results: Sequence[str], relevant: set[str], k: int) -> float
         if docid in relevant:
             return 1.0 / rank
     return 0.0
-

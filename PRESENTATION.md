@@ -39,9 +39,9 @@ Python, Streamlit, Sentence Transformers, multilingual E5, NumPy, JSONL, Hugging
 
 Show the language selector, example queries, top-k slider, score, document ID, title, and passage text.
 
-## Slide 9 — Evaluation and Limitations
+## Slide 9 — Baseline Comparison and Limitations
 
-Discuss Recall@5, MRR@10, small sample size, model download requirement, and linear NumPy ranking.
+Compare multilingual E5 semantic search against the TF-IDF-style keyword baseline using Recall@5 and MRR@10. Discuss small sample size, model download requirement, and linear NumPy ranking.
 
 ## Slide 10 — Conclusion and Future Work
 
@@ -61,4 +61,5 @@ Scale to the complete corpus, add languages, compare hybrid retrieval, and add r
 10. Why is the full MIRACL corpus not bundled?
 11. How would you scale this system?
 12. What is the difference between retrieval and answer generation?
-
+13. Why is a keyword baseline useful in an information-retrieval project?
+14. What would happen if the corpus were expanded to millions of passages?
