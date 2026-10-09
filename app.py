@@ -1,237 +1,297 @@
-"""Streamlit UI for the multilingual MIRACL semantic search project."""
+"""Streamlit interface for multilingual search over MIRACL."""
 
-from pathlib import Path
+from html import escape
 import json
 import os
+from pathlib import Path
+import re
+import time
 
 import streamlit as st
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import CrossEncoder, SentenceTransformer
 
 from search_engine import (
     SUPPORTED_LANGUAGES,
     Document,
-    diversify_ranked,
     detect_language,
+    diversify_ranked,
     extractive_answer,
     filter_documents,
+    hybrid_rank,
     keyword_rank,
     load_documents,
     rank_embeddings,
-    recall_at_k,
-    reciprocal_rank,
 )
+from vector_index import LocalIndex
 
 
 ROOT = Path(__file__).parent
-configured_corpus = Path(os.getenv("MIRACL_CORPUS_PATH", "data/sample_corpus.jsonl"))
-CORPUS_PATH = configured_corpus if configured_corpus.is_absolute() else ROOT / configured_corpus
 MODEL_NAME = "intfloat/multilingual-e5-small"
-EVALUATION_SNAPSHOT_PATH = ROOT / "data" / "evaluation_snapshot.json"
+RERANKER_NAME = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
+CORPUS_PATH = Path(os.getenv("MIRACL_CORPUS_PATH", ROOT / "data" / "sample_corpus.jsonl"))
+if not CORPUS_PATH.is_absolute():
+    CORPUS_PATH = ROOT / CORPUS_PATH
+INDEX_PATH = Path(os.getenv("MIRACL_INDEX_PATH", ROOT / "data" / "miracl_index"))
+if not INDEX_PATH.is_absolute():
+    INDEX_PATH = ROOT / INDEX_PATH
 
 
 @st.cache_resource(show_spinner="Loading multilingual embedding model...")
-def load_model() -> SentenceTransformer:
+def load_model():
     return SentenceTransformer(MODEL_NAME)
 
 
-@st.cache_data(show_spinner="Encoding the corpus...")
-def encode_documents(_model: SentenceTransformer, documents: tuple[Document, ...]):
-    passages = [f"passage: {document.title}. {document.text}" for document in documents]
-    return _model.encode(passages, normalize_embeddings=True, show_progress_bar=False)
+@st.cache_resource(show_spinner="Loading local MIRACL index...")
+def load_index(path: str):
+    return LocalIndex(path)
 
 
-def search(model: SentenceTransformer, documents: list[Document], query: str, top_k: int):
-    if not query.strip() or not documents:
+@st.cache_resource(show_spinner="Loading multilingual reranker...")
+def load_reranker():
+    return CrossEncoder(RERANKER_NAME)
+
+
+@st.cache_data(show_spinner="Encoding corpus passages...")
+def encode_documents(_model, documents: tuple[Document, ...]):
+    return _model.encode(
+        [f"passage: {doc.title}. {doc.text}" for doc in documents],
+        normalize_embeddings=True,
+        show_progress_bar=False,
+    )
+
+
+def diversified(results: list[tuple[Document, float]], top_k: int):
+    ranked = [(i, score) for i, (_, score) in enumerate(results)]
+    chosen = diversify_ranked(ranked, [doc for doc, _ in results], min(top_k, len(results)))
+    return [(results[i][0], score) for i, score in chosen]
+
+
+def fuse(semantic, lexical, limit: int):
+    documents = []
+    positions = {}
+    rankings = []
+    for ranking in (semantic, lexical):
+        ranked = []
+        for doc, score in ranking:
+            key = (doc.language, doc.docid)
+            if key not in positions:
+                positions[key] = len(documents)
+                documents.append(doc)
+            ranked.append((positions[key], score))
+        rankings.append(ranked)
+    return [(documents[i], score) for i, score in hybrid_rank(*rankings, top_k=limit)]
+
+
+def retrieve(model, documents, index, query: str, language: str, method: str, top_k: int):
+    if not query.strip():
         return []
-    embeddings = encode_documents(model, tuple(documents))
-    query_embedding = model.encode([f"query: {query.strip()}"], normalize_embeddings=True, show_progress_bar=False)[0]
-    ranked = rank_embeddings(query_embedding, embeddings, min(len(documents), top_k * 3))
-    return [(documents[index], score) for index, score in diversify_ranked(ranked, documents, top_k)]
+    pool_size = max(30, top_k * 6)
+    semantic = []
+    if method != "Keyword baseline":
+        query_vector = model.encode([f"query: {query.strip()}"], normalize_embeddings=True, show_progress_bar=False)[0]
+        if index:
+            semantic = index.vector_search(query_vector, language, pool_size)
+        else:
+            candidates = filter_documents(documents, language)
+            vectors = encode_documents(model, tuple(candidates))
+            ranked = rank_embeddings(query_vector, vectors, min(pool_size, len(candidates)))
+            semantic = [(candidates[i], score) for i, score in ranked]
+    lexical = []
+    if method in ("Keyword baseline", "Hybrid (semantic + keyword)", "Hybrid + reranker"):
+        if index:
+            lexical = [(index.document_by_global_index(i), score) for i, score in index.keyword_search(query, language, pool_size)]
+        else:
+            candidates = filter_documents(documents, language)
+            lexical = [(candidates[i], score) for i, score in keyword_rank(query, candidates, pool_size)]
+    if method == "Keyword baseline":
+        results = lexical
+    elif method == "Semantic (multilingual E5)":
+        results = semantic
+    else:
+        results = fuse(semantic, lexical, pool_size)
+    if method == "Hybrid + reranker" and results:
+        reranker = load_reranker()
+        scores = reranker.predict([(query, f"{doc.title}. {doc.text}") for doc, _ in results], show_progress_bar=False)
+        results = sorted(((doc, float(score)) for (doc, _), score in zip(results, scores)), key=lambda item: -item[1])
+    return diversified(results, top_k)
 
 
-def keyword_search(documents: list[Document], query: str, top_k: int):
-    if not query.strip() or not documents:
-        return []
-    ranked = keyword_rank(query, documents, min(len(documents), top_k * 3))
-    return [(documents[index], score) for index, score in diversify_ranked(ranked, documents, top_k)]
-
-
-def corpus_examples(documents: list[Document]) -> dict[str, str]:
-    """Use topics that actually exist in the selected corpus profile."""
-    examples: dict[str, str] = {}
-    for code, name in SUPPORTED_LANGUAGES.items():
-        for document in documents:
-            if document.language == code:
-                examples[f"{name}: {document.title}"] = document.title
-                break
+def corpus_examples(documents: list[Document]):
+    examples = {}
+    for doc in documents:
+        examples.setdefault(f"{SUPPORTED_LANGUAGES[doc.language]}: {doc.title}", doc.title)
     return examples
 
 
-@st.cache_data(show_spinner="Running demo evaluation...")
-def demo_evaluation(_model: SentenceTransformer, documents: tuple[Document, ...]) -> list[dict[str, float | str]]:
-    queries_path = ROOT / "data" / "eval_queries.jsonl"
-    if not queries_path.exists():
-        return []
-    with queries_path.open(encoding="utf-8") as handle:
-        queries = [json.loads(line) for line in handle if line.strip()]
-    embeddings = encode_documents(_model, documents)
-    semantic_recalls: list[float] = []
-    semantic_ranks: list[float] = []
-    keyword_recalls: list[float] = []
-    keyword_ranks: list[float] = []
-    for item in queries:
-        candidates = filter_documents(documents, item.get("language", "all"))
-        if not candidates:
-            continue
-        indexes = [documents.index(document) for document in candidates]
-        query_embedding = _model.encode([f"query: {item['query']}"], normalize_embeddings=True, show_progress_bar=False)[0]
-        ranked = rank_embeddings(query_embedding, embeddings[indexes], top_k=min(10, len(candidates)))
-        relevant = set(item["relevant_docids"])
-        semantic_ids = [candidates[index].docid for index, _ in ranked]
-        semantic_recalls.append(recall_at_k(semantic_ids, relevant, 5))
-        semantic_ranks.append(reciprocal_rank(semantic_ids, relevant, 10))
-        keyword_ids = [candidates[index].docid for index, _ in keyword_rank(item["query"], candidates, top_k=10)]
-        keyword_recalls.append(recall_at_k(keyword_ids, relevant, 5))
-        keyword_ranks.append(reciprocal_rank(keyword_ids, relevant, 10))
-    if not semantic_recalls:
-        return []
-    return [
-        {"Method": "Semantic E5", "Recall@5": sum(semantic_recalls) / len(semantic_recalls), "MRR@10": sum(semantic_ranks) / len(semantic_ranks)},
-        {"Method": "Keyword baseline", "Recall@5": sum(keyword_recalls) / len(keyword_recalls), "MRR@10": sum(keyword_ranks) / len(keyword_ranks)},
-    ]
+def highlight(text: str, query: str) -> str:
+    terms = list(dict.fromkeys(re.findall(r"\w+", query, flags=re.UNICODE)))
+    escaped = escape(text)
+    if not terms:
+        return escaped
+    pattern = re.compile(r"(?<!\w)(" + "|".join(re.escape(term) for term in sorted(terms, key=len, reverse=True)) + r")(?!\w)", re.IGNORECASE)
+    return pattern.sub(r"<mark>\1</mark>", escaped)
 
 
-def count_jsonl(path: Path) -> int:
+def render_results(results, query: str, method: str):
+    if not results:
+        st.info("No matching passages found. Try All languages or a larger corpus.")
+        return
+    doc, score = results[0]
+    with st.expander("Evidence based answer excerpt", expanded=True):
+        st.markdown(highlight(extractive_answer(query, doc.text), query), unsafe_allow_html=True)
+        st.caption(f"Source: {doc.title} · {doc.language.upper()} · {doc.docid} · score {score:.4f}")
+    for rank, (doc, score) in enumerate(results, 1):
+        st.markdown(f"#### {rank}. {doc.title}")
+        st.caption(f"{SUPPORTED_LANGUAGES[doc.language]} · {doc.docid} · score {score:.4f}")
+        st.markdown(highlight(doc.text, query), unsafe_allow_html=True)
+
+
+def read_snapshot():
+    path = ROOT / "data" / "evaluation_snapshot.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"profiles": {}}
+
+
+def jsonl_count(path: Path) -> int:
     if not path.exists():
         return 0
     with path.open(encoding="utf-8") as handle:
-        return sum(1 for line in handle if line.strip())
-
-
-def load_evaluation_snapshot() -> dict:
-    """Load checked-in metrics so the Analysis tab is useful immediately."""
-    if not EVALUATION_SNAPSHOT_PATH.exists():
-        return {}
-    try:
-        with EVALUATION_SNAPSHOT_PATH.open(encoding="utf-8") as handle:
-            return json.load(handle)
-    except (OSError, json.JSONDecodeError):
-        return {}
-
-
-def corpus_profile(path: Path) -> str:
-    """Return the name used by the stored evaluation profile."""
-    if path.name == "local_corpus.jsonl":
-        return "local"
-    if path.name == "sample_corpus.jsonl":
-        return "cloud"
-    return "other"
+        return sum(bool(line.strip()) for line in handle)
 
 
 st.set_page_config(page_title="MIRACL Multilingual Search", layout="wide")
 st.title("Multilingual MIRACL Search")
-st.caption("Semantic retrieval over MIRACL passages using multilingual-e5-small. Results are ranked evidence, not unsupported generated answers.")
+st.caption("Search MIRACL passages using multilingual E5, hybrid retrieval, and an optional multilingual reranker.")
 
+use_index = bool(str(INDEX_PATH)) and (INDEX_PATH / "manifest.json").exists()
+index = load_index(str(INDEX_PATH)) if use_index else None
 try:
-    all_documents = load_documents(CORPUS_PATH)
+    all_documents = [] if index else load_documents(CORPUS_PATH)
 except (OSError, ValueError) as exc:
-    st.error(f"Could not load the corpus: {exc}")
+    st.error(f"Could not load corpus: {exc}")
     st.stop()
+
+available = index.languages if index else {
+    code: sum(doc.language == code for doc in all_documents)
+    for code in dict.fromkeys(doc.language for doc in all_documents)
+}
+language_options = {"Query language (automatic)": "auto", "All languages": "all"}
+language_options.update({SUPPORTED_LANGUAGES[code]: code for code in available})
+corpus_name = f"Indexed MIRACL ({index.count:,} passages)" if index else f"{len(all_documents):,} passages ({CORPUS_PATH.name})"
 
 with st.sidebar:
     st.header("Search settings")
-    language_options = {"Query language (automatic)": "auto", "All languages": "all", **{name: code for code, name in SUPPORTED_LANGUAGES.items()}}
-    selected_label = st.selectbox("Language", list(language_options))
-    selected_language_mode = language_options[selected_label]
-    top_k = st.slider("Results to show", min_value=1, max_value=10, value=5)
-    search_method = st.selectbox("Search method", ["Semantic (multilingual E5)", "Keyword baseline"])
+    language_mode = language_options[st.selectbox("Language", list(language_options))]
+    top_k = st.slider("Results to show", 1, 10, 5)
+    method = st.selectbox("Search method", ["Semantic (multilingual E5)", "Hybrid (semantic + keyword)", "Hybrid + reranker", "Keyword baseline"])
     st.divider()
-    st.markdown("**Corpus**")
-    st.write(f"{len(all_documents):,} passages ({CORPUS_PATH.name})")
-    st.write("English | Hindi | Spanish | Arabic")
-    st.markdown("[Refresh the sample](https://huggingface.co/datasets/miracl/miracl-corpus)")
+    st.markdown("**Active corpus**")
+    st.write(corpus_name)
+    st.caption("The full indexed corpus stays on this computer; Streamlit Cloud uses its small sample.")
 
-search_tab, analysis_tab = st.tabs(["Search", "Analysis"])
+search_tab, compare_tab, analysis_tab = st.tabs(["Search", "Compare methods", "Analysis"])
 
 with search_tab:
-    examples = corpus_examples(all_documents)
-    selected_example = st.selectbox("Try an example query", ["Choose an example...", *examples])
-    st.caption("Examples come from topics present in the loaded corpus.")
-    default_query = "" if selected_example == "Choose an example..." else examples[selected_example]
-    query = st.text_input("Enter a search query", value=default_query, placeholder="Ask in English, Hindi, Spanish, or Arabic...")
-    detected_language = detect_language(query) if query.strip() else "en"
-    effective_language = detected_language if selected_language_mode == "auto" else selected_language_mode
-    documents = filter_documents(all_documents, effective_language)
-    if selected_language_mode == "auto" and query.strip():
-        st.caption(f"Detected language: {SUPPORTED_LANGUAGES[detected_language]}. Searching that language only. Choose All languages for cross-language search.")
-
-    if query.strip():
-        with st.spinner("Searching..."):
-            if search_method == "Semantic (multilingual E5)":
-                results = search(load_model(), documents, query, top_k)
-            else:
-                results = keyword_search(documents, query, top_k)
-        st.subheader(f"Top {len(results)} results")
-        if not results:
-            st.info("No matching documents were found. Try All languages or the larger local corpus.")
+    examples = corpus_examples(all_documents) if all_documents else {}
+    example = st.selectbox("Try a corpus title", ["Choose an example...", *examples])
+    query = st.text_input("Search in your language", value=examples.get(example, ""), key="query_input", placeholder="Ask in English, Hindi, Spanish, or Arabic...")
+    detected = detect_language(query) if query.strip() else "en"
+    active_language = detected if language_mode == "auto" else language_mode
+    if language_mode == "auto" and query.strip():
+        if active_language not in available:
+            active_language = "all"
+            st.caption(f"Detected: {SUPPORTED_LANGUAGES.get(detected, detected)}, which is not in this corpus. Searching all available languages.")
         else:
-            answer_document, answer_score = results[0]
-            with st.expander("Grounded answer candidate", expanded=True):
-                st.info(extractive_answer(query, answer_document.text))
-                st.caption(f"Source: {answer_document.title} | {answer_document.docid} | score {answer_score:.4f}")
-        for rank, (document, score) in enumerate(results, start=1):
-            st.markdown(f"### {rank}. {document.title}")
-            score_name = "cosine score" if search_method == "Semantic (multilingual E5)" else "TF-IDF score"
-            st.caption(f"{SUPPORTED_LANGUAGES[document.language]} | {document.docid} | {score_name} {score:.4f}")
-            st.write(document.text)
-            st.divider()
+            st.caption(f"Detected: {SUPPORTED_LANGUAGES.get(detected, detected)} · searching that language. Select All languages for cross-language results.")
+    if query.strip():
+        started = time.perf_counter()
+        results = retrieve(load_model(), all_documents, index, query, active_language, method, top_k)
+        elapsed = (time.perf_counter() - started) * 1000
+        st.caption(f"{len(results)} results · {elapsed:.0f} ms · {method}")
+        render_results(results, query, method)
     else:
         st.info("Enter a query or choose an example to begin.")
 
+with compare_tab:
+    compare_query = st.text_input("Query to compare", value=st.session_state.get("query_input", ""), key="compare_query")
+    compare_language = st.selectbox("Compare within", ["Automatic", "All languages", *[SUPPORTED_LANGUAGES[c] for c in available]], key="compare_language")
+    compare_code = detect_language(compare_query) if compare_language == "Automatic" else ("all" if compare_language == "All languages" else next(code for code in available if SUPPORTED_LANGUAGES[code] == compare_language))
+    if compare_code not in available:
+        compare_code = "all"
+    if compare_query.strip() and st.button("Compare all methods"):
+        pool_size = max(30, top_k * 6)
+        model = load_model()
+        vector = model.encode([f"query: {compare_query.strip()}"], normalize_embeddings=True, show_progress_bar=False)[0]
+        candidates = []
+        passage_vectors = None
+        if not index:
+            candidates = filter_documents(all_documents, compare_code)
+            passage_vectors = encode_documents(model, tuple(candidates))
+        started = time.perf_counter()
+        if index:
+            semantic = index.vector_search(vector, compare_code, pool_size)
+        else:
+            semantic = [(candidates[i], score) for i, score in rank_embeddings(vector, passage_vectors, min(pool_size, len(candidates)))]
+        semantic_ms = (time.perf_counter() - started) * 1000
+        started = time.perf_counter()
+        if index:
+            lexical = [(index.document_by_global_index(i), score) for i, score in index.keyword_search(compare_query, compare_code, pool_size)]
+        else:
+            candidates = filter_documents(all_documents, compare_code)
+            lexical = [(candidates[i], score) for i, score in keyword_rank(compare_query, candidates, pool_size)]
+        lexical_ms = (time.perf_counter() - started) * 1000
+        hybrid = fuse(semantic, lexical, pool_size)
+        reranker = load_reranker()
+        started = time.perf_counter()
+        reranked_scores = reranker.predict([(compare_query, f"{doc.title}. {doc.text}") for doc, _ in hybrid], show_progress_bar=False)
+        reranked = sorted(((doc, float(score)) for (doc, _), score in zip(hybrid, reranked_scores)), key=lambda row: -row[1])
+        reranker_ms = (time.perf_counter() - started) * 1000
+        comparison = [
+            ("Semantic (multilingual E5)", diversified(semantic, top_k), semantic_ms),
+            ("Hybrid (semantic + keyword)", diversified(hybrid, top_k), semantic_ms + lexical_ms),
+            ("Hybrid + reranker", diversified(reranked, top_k), semantic_ms + lexical_ms + reranker_ms),
+            ("Keyword baseline", diversified(lexical, top_k), lexical_ms),
+        ]
+        st.session_state["method_comparison"] = (compare_query, comparison)
+    saved_comparison = st.session_state.get("method_comparison")
+    if saved_comparison and saved_comparison[0] == compare_query:
+        comparison = saved_comparison[1]
+        st.caption("Timings exclude the shared query encoding and first model download/startup.")
+        st.dataframe([{"Method": name, "Time (ms)": round(ms), "Top result": rows[0][0].title if rows else "No result", "Score": round(rows[0][1], 4) if rows else 0} for name, rows, ms in comparison], width="stretch", hide_index=True)
+        for name, rows, ms in comparison:
+            with st.expander(f"{name} · {ms:.0f} ms"):
+                render_results(rows[:3], compare_query, name)
+
 with analysis_tab:
-    st.subheader("Corpus analysis")
-    unique_articles = len({(document.language, document.title) for document in all_documents})
-    metric_columns = st.columns(3)
-    metric_columns[0].metric("Passages", f"{len(all_documents):,}")
-    metric_columns[1].metric("Articles", f"{unique_articles:,}")
-    metric_columns[2].metric("Languages", len({document.language for document in all_documents}))
-    language_rows = []
-    for code, name in SUPPORTED_LANGUAGES.items():
-        language_documents = [document for document in all_documents if document.language == code]
-        language_rows.append({"Language": name, "Passages": len(language_documents), "Articles": len({document.title for document in language_documents})})
-    st.table(language_rows)
+    st.subheader("Corpus overview")
+    total = index.count if index else len(all_documents)
+    metrics = st.columns(3)
+    metrics[0].metric("Passages", f"{total:,}")
+    metrics[1].metric("Storage", "SQLite + mmap" if index else "JSONL sample")
+    metrics[2].metric("Languages", len(available))
+    language_rows = [{"Language": SUPPORTED_LANGUAGES[code], "Passages": count} for code, count in available.items()]
+    st.bar_chart(language_rows, x="Language", y="Passages", horizontal=True)
 
-    st.subheader("Evaluation")
-    st.write("The saved evaluation below is shown automatically; no button is required to view the project results.")
-    snapshot = load_evaluation_snapshot()
-    profile = corpus_profile(CORPUS_PATH)
-    snapshot_rows = snapshot.get("profiles", {}).get(profile, [])
-    if snapshot_rows:
-        st.table(snapshot_rows)
-        st.caption(snapshot.get("note", "These metrics were calculated with the bundled evaluation queries."))
+    st.subheader("Search method comparison")
+    st.write("Compare semantic, hybrid, reranked, and keyword results for the same query in the Compare methods tab.")
+    profile = "local" if index or CORPUS_PATH.name == "local_corpus.jsonl" else "cloud"
+    saved_rows = read_snapshot().get("profiles", {}).get(profile, [])
+    if saved_rows:
+        st.dataframe(saved_rows, width="stretch", hide_index=True)
+        st.bar_chart(saved_rows, x="Method", y=["Recall@5", "MRR@10"])
+        st.caption("Saved metrics use four demonstration queries. For a full-corpus index, these figures describe the 4,000-passage local sample, not the full index.")
     else:
-        st.info("No saved metrics are available for this corpus profile. Use the optional live evaluation below.")
-
-    with st.expander("Optional: recalculate evaluation for the active corpus"):
-        st.caption("This loads the embedding model and may take a little time on CPU.")
-        if st.button("Recalculate live evaluation"):
-            evaluation = demo_evaluation(load_model(), tuple(all_documents))
-            if evaluation:
-                st.table(evaluation)
-            else:
-                st.info("No evaluation queries are available.")
-
+        st.info("No saved evaluation is available for this corpus profile.")
     topics_path = ROOT / "data" / "miracl_dev_topics.jsonl"
     qrels_path = ROOT / "data" / "miracl_dev_qrels.jsonl"
-    st.subheader("Official MIRACL evaluation files")
-    st.write(f"Development topics: {count_jsonl(topics_path):,}")
-    st.write(f"Positive qrels: {count_jsonl(qrels_path):,}")
-    st.code("python scripts/download_miracl_dev.py\npython scripts/evaluate_official.py --max-queries 100")
-
-    st.subheader("Runtime")
-    st.write(f"Active corpus: {CORPUS_PATH}")
-    st.write("Cloud default: data/sample_corpus.jsonl | Local demo: data/local_corpus.jsonl")
-    st.write("Full MIRACL shards: downloaded separately under data/miracl_full; not loaded by this lightweight app")
-    st.write(f"Embedding model: {MODEL_NAME}")
-    st.write("Inference backend: Sentence Transformers / PyTorch")
-    st.write("Ollama: not used by this project")
+    eval_columns = st.columns(2)
+    eval_columns[0].metric("Official dev topics downloaded", f"{jsonl_count(topics_path):,}")
+    eval_columns[1].metric("Positive relevance judgments", f"{jsonl_count(qrels_path):,}")
+    st.caption("Download official files with `python scripts/download_miracl_dev.py`; evaluation commands are in README.")
+    st.subheader("Index and runtime")
+    st.write(f"Active corpus: `{INDEX_PATH if index else CORPUS_PATH}`")
+    st.write(f"Embedding model: `{MODEL_NAME}` · NumPy exact similarity search")
+    st.write(f"Reranker (loads only when selected): `{RERANKER_NAME}`")
+    st.write("Local full index includes disk backed embeddings and SQLite full text search. Ollama is not used.")

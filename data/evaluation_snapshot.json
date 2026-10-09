@@ -1,29 +1,17 @@
 {
-  "note": "Precomputed with data/eval_queries.jsonl and multilingual-e5-small. Use the optional live evaluation to recalculate metrics for a changed corpus.",
+  "note": "Precomputed with data/eval_queries.jsonl and multilingual-e5-small. Four queries are a demonstration set, not a full benchmark.",
   "profiles": {
     "cloud": [
-      {
-        "Method": "Semantic E5",
-        "Recall@5": 0.75,
-        "MRR@10": 0.75
-      },
-      {
-        "Method": "Keyword baseline",
-        "Recall@5": 0.75,
-        "MRR@10": 0.625
-      }
+      {"Method": "Semantic E5", "Recall@5": 0.75, "MRR@10": 0.75, "Queries": 4},
+      {"Method": "Keyword baseline", "Recall@5": 0.75, "MRR@10": 0.625, "Queries": 4},
+      {"Method": "Hybrid RRF", "Recall@5": 0.75, "MRR@10": 0.75, "Queries": 4},
+      {"Method": "Hybrid + reranker", "Recall@5": 0.75, "MRR@10": 0.75, "Queries": 4}
     ],
     "local": [
-      {
-        "Method": "Semantic E5",
-        "Recall@5": 1.0,
-        "MRR@10": 0.75
-      },
-      {
-        "Method": "Keyword baseline",
-        "Recall@5": 0.5,
-        "MRR@10": 0.1875
-      }
+      {"Method": "Semantic E5", "Recall@5": 1.0, "MRR@10": 0.75, "Queries": 4},
+      {"Method": "Keyword baseline", "Recall@5": 0.5, "MRR@10": 0.188, "Queries": 4},
+      {"Method": "Hybrid RRF", "Recall@5": 0.75, "MRR@10": 0.417, "Queries": 4},
+      {"Method": "Hybrid + reranker", "Recall@5": 1.0, "MRR@10": 0.875, "Queries": 4}
     ]
   }
 }

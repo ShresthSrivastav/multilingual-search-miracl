@@ -20,7 +20,7 @@ def download(languages: list[str], output: Path) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--languages", nargs="+", default=["en", "hi", "es", "ar"])
+    parser.add_argument("--languages", nargs="+", default=["ar", "bn", "de", "en", "es", "fa", "fi", "fr", "hi", "id", "ja", "ko", "ru", "sw", "te", "th", "yo", "zh"])
     parser.add_argument("--output", type=Path, default=Path("data/miracl_full"))
     args = parser.parse_args()
     location = download(args.languages, args.output)

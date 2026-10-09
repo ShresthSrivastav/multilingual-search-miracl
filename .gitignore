@@ -8,4 +8,6 @@ data/*.cache
 data/local_corpus.jsonl
 data/miracl_dev_*.jsonl
 data/miracl_full/
+data/*_index/
+data/miracl_index/
 models/

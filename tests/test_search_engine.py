@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from search_engine import Document, detect_language, diversify_ranked, extractive_answer, filter_documents, keyword_rank, rank_embeddings
+from search_engine import Document, detect_language, diversify_ranked, extractive_answer, filter_documents, hybrid_rank, keyword_rank, rank_embeddings
 
 
 class SearchEngineTests(unittest.TestCase):
@@ -29,6 +29,10 @@ class SearchEngineTests(unittest.TestCase):
         ]
         self.assertEqual(keyword_rank("solar power", documents, top_k=1)[0][0], 0)
 
+    def test_hybrid_combines_both_rankings(self):
+        ranked = hybrid_rank([(0, 0.9), (1, 0.8)], [(2, 1.0), (0, 0.7)], top_k=3)
+        self.assertEqual([index for index, _ in ranked], [0, 2, 1])
+
     def test_diversifies_article_titles(self):
         documents = [
             Document("1", "Same article", "first", "en"),
@@ -49,6 +53,9 @@ class SearchEngineTests(unittest.TestCase):
         self.assertEqual(detect_language("ما هو الماء؟"), "ar")
         self.assertEqual(detect_language("¿Qué es Andorra?"), "es")
         self.assertEqual(detect_language("What is anarchism?"), "en")
+        self.assertEqual(detect_language("\u00bfQu\u00e9 idioma oficial se habla?"), "es")
+        self.assertEqual(detect_language("Was ist die Hauptstadt von Deutschland?"), "de")
+        self.assertEqual(detect_language("\u092d\u093e\u0930\u0924 \u0915\u0940 \u0930\u093e\u091c\u0927\u093e\u0928\u0940"), "hi")
 
 
 if __name__ == "__main__":

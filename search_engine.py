@@ -8,15 +8,28 @@ from collections import Counter
 import json
 import math
 import re
-from typing import Iterable, Sequence
+from typing import Sequence
 
 import numpy as np
 
 
-SUPPORTED_LANGUAGES = {"en": "English", "hi": "Hindi", "es": "Spanish", "ar": "Arabic"}
+SUPPORTED_LANGUAGES = {
+    "en": "English", "hi": "Hindi", "es": "Spanish", "ar": "Arabic", "bn": "Bangla",
+    "de": "German", "fa": "Persian", "fi": "Finnish", "fr": "French", "id": "Indonesian",
+    "ja": "Japanese", "ko": "Korean", "ru": "Russian", "sw": "Swahili", "te": "Telugu",
+    "th": "Thai", "yo": "Yoruba", "zh": "Chinese",
+}
 TOKEN_PATTERN = re.compile(r"\w+", re.UNICODE)
 SENTENCE_PATTERN = re.compile(r"(?<=[.!?\u0964\u0965؟])\s+|\n+")
 SPANISH_MARKERS = {"qué", "cuál", "cuáles", "cómo", "dónde", "es", "una", "el", "la", "los", "las", "de", "para"}
+LATIN_MARKERS = {
+    "es": SPANISH_MARKERS,
+    "de": {"der", "die", "das", "und", "ist", "nicht", "mit", "von", "für"},
+    "fr": {"le", "les", "des", "est", "et", "une", "pour", "avec", "dans"},
+    "fi": {"että", "ei", "oli", "kun", "se", "ovat", "myös"},
+    "id": {"yang", "dan", "dengan", "untuk", "ini", "dari", "pada"},
+    "sw": {"katika", "hii", "hiyo", "kwa", "lakini", "zaidi", "kutoka"},
+}
 
 
 @dataclass(frozen=True)
@@ -32,10 +45,27 @@ def detect_language(text: str) -> str:
     if re.search(r"[\u0900-\u097F]", text):
         return "hi"
     if re.search(r"[\u0600-\u06FF]", text):
-        return "ar"
+        return "fa" if re.search(r"[پچژگک]", text) else "ar"
+    for pattern, language in (
+        (r"[\u0980-\u09FF]", "bn"), (r"[\u0C00-\u0C7F]", "te"),
+        (r"[\u0E00-\u0E7F]", "th"), (r"[\uAC00-\uD7AF]", "ko"),
+        (r"[\u3040-\u30FF]", "ja"), (r"[\u0400-\u04FF]", "ru"),
+        (r"[\u4E00-\u9FFF]", "zh"),
+    ):
+        if re.search(pattern, text):
+            return language
     terms = set(TOKEN_PATTERN.findall(text.casefold()))
-    if re.search(r"[¿¡áéíóúñ]", text.casefold()) or len(terms & SPANISH_MARKERS) >= 2:
+    if re.search(r"[¿¡áéíóúñ]", text.casefold()):
         return "es"
+    if re.search(r"[àâçéèêëîïôùûüÿœ]", text.casefold()):
+        return "fr"
+    if re.search(r"[äöüß]", text.casefold()):
+        return "de"
+    for language, markers in LATIN_MARKERS.items():
+        if len(terms & markers) >= 2:
+            return language
+    if re.search(r"[ẹọṣ]", text.casefold()):
+        return "yo"
     return "en"
 
 
@@ -121,6 +151,19 @@ def keyword_rank(query: str, documents: Sequence[Document], top_k: int = 5) -> l
         document_norm = math.sqrt(sum(value * value for value in document_vector.values()))
         scores.append((index, dot_product / (query_norm * document_norm)))
     return sorted(scores, key=lambda item: (-item[1], item[0]))[:top_k]
+
+
+def hybrid_rank(
+    semantic: Sequence[tuple[int, float]], keyword: Sequence[tuple[int, float]], top_k: int = 5
+) -> list[tuple[int, float]]:
+    """Fuse semantic and lexical rankings with reciprocal rank fusion."""
+    if top_k < 1:
+        raise ValueError("top_k must be at least 1")
+    fused: dict[int, float] = {}
+    for ranking in (semantic, keyword):
+        for rank, (index, _) in enumerate(ranking, start=1):
+            fused[index] = fused.get(index, 0.0) + 1.0 / (60 + rank)
+    return sorted(fused.items(), key=lambda item: (-item[1], item[0]))[:top_k]
 
 
 def diversify_ranked(

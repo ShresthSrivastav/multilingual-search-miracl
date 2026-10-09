@@ -2,109 +2,83 @@
 
 ## Abstract
 
-This project implements a multilingual semantic search system using a sample of the MIRACL retrieval corpus. Users can submit queries in English, Hindi, Spanish, or Arabic and receive passages ranked by semantic similarity. Unlike keyword search, the system represents both queries and passages as multilingual embeddings, allowing it to match meaning across languages and wording variations.
+This project compares semantic, lexical, hybrid, and reranked retrieval over the MIRACL multilingual passage collection. A small balanced sample supports the hosted demonstration, while a local builder creates disk-backed vectors and full-text indexes for the complete downloaded collection. Results include passage evidence and source identifiers.
 
-## 1. Objectives
+## Objectives
 
-1. Build a working multilingual search interface.
-2. Use a standard multilingual embedding model for semantic retrieval.
-3. Demonstrate ranking with cosine similarity.
-4. Evaluate retrieval with Recall@5 and MRR@10.
-5. Provide a reproducible and explainable college-level implementation.
-6. Compare semantic retrieval with a traditional keyword baseline.
-7. Produce a grounded answer candidate using only retrieved evidence.
+1. Build a multilingual passage search application.
+2. Compare multilingual semantic retrieval with lexical retrieval.
+3. Combine the ranking methods and test a multilingual reranker.
+4. Report Recall@5 and MRR@10.
+5. Make a local full-corpus index usable without loading the entire corpus into RAM.
+6. Highlight query terms in the retrieved source evidence.
 
-## 2. Dataset
+## Dataset
 
-MIRACL is a multilingual information-retrieval dataset built from Wikipedia passages. This project uses a small sample from the English, Hindi, Spanish, and Arabic corpus configurations. Each record contains a document ID, title, passage text, and language code.
+MIRACL consists of Wikipedia passages and retrieval topics across 18 languages. The cloud app uses a small balanced sample; the local downloader can retrieve all available corpus shards. Each passage has a document ID, title, text, and language code.
 
-The full MIRACL corpus is not bundled because it is too large for a normal classroom laptop. The sampler can retrieve a larger sample when required.
+## Methodology
 
-## 3. Methodology
+### Semantic retrieval
 
-### Preprocessing
+The `intfloat/multilingual-e5-small` encoder embeds passages as `passage: <title>. <text>` and queries as `query: <query>`. The vectors are normalized; dot product therefore gives cosine similarity.
 
-Each passage is represented as:
+### Lexical and hybrid retrieval
 
-```text
-passage: <title>. <passage text>
-```
+The bundled JSONL demo uses a lightweight TF-IDF keyword baseline; the full local index uses SQLite FTS5 for lexical candidates. Hybrid search combines semantic and lexical rankings with reciprocal-rank fusion. A multilingual cross-encoder optionally reranks the fused candidates. Its language coverage is smaller than the 18-language corpus, so reranker results should be checked per language.
 
-The `intfloat/multilingual-e5-small` model encodes these strings into normalized vectors. User queries are represented as:
+### Full local index
 
-```text
-query: <user query>
-```
+The index builder processes compressed MIRACL shards in batches, writing float16 normalized vectors as memory-mapped NumPy files and passage text/metadata into SQLite FTS5. Query-time vector scoring is chunked to limit RAM. It remains an exact linear scan, so larger indexes can take longer to search.
 
-### Retrieval
+### User interface and evidence
 
-For every query, the application computes the dot product between the normalized query vector and normalized passage vectors. With normalized vectors, the dot product is equivalent to cosine similarity. Results are sorted from highest to lowest score.
+The Streamlit app includes Search, Compare methods, and Analysis tabs. Users can compare all four methods on the same query. Matching query terms are highlighted in source passages; the answer excerpt is selected from retrieved text and is not generated.
 
-The project also includes a dependency-free TF-IDF-style keyword baseline. It uses Unicode-aware tokenization, term frequency, inverse document frequency, and cosine similarity. This provides a simple traditional baseline for comparison in the report and presentation.
-
-### Interface
-
-The Streamlit interface provides a language filter, automatic query-language detection, top-k control, search-method selector, example queries, ranked result cards, and an Analysis tab. The Analysis tab reports corpus statistics, language distribution, demo metrics, official MIRACL file counts, and runtime details. Expensive model loading and corpus encoding are cached.
-
-The interface displays an extractive answer candidate from the highest-ranked passage. The answer is made from source sentences only, with a visible document ID, so the system does not present unsupported generated text as fact.
-
-## 4. System Design
+## System design
 
 ```text
-User query
-    ↓
-Streamlit interface
-    ↓
-E5 query embedding
-    ↓
-NumPy cosine ranking
-    ↓
-Ranked MIRACL passages
+Query
+  -> multilingual E5 vector + SQLite FTS candidates
+  -> semantic / lexical / hybrid ranking
+  -> optional multilingual cross-encoder reranking
+  -> ranked MIRACL passages with highlighted evidence
 ```
 
-## 5. Evaluation
+## Evaluation
 
-The demonstration evaluation set contains one query per supported language. The relevant document IDs are stored in `data/eval_queries.jsonl`. The evaluation compares multilingual E5 semantic search against the keyword baseline.
+The bundled classroom evaluation has four queries, one for each initial demo language. Run `python scripts/evaluate.py` to compare semantic E5, keyword, hybrid RRF, and hybrid plus reranker. The app displays saved results and charts in Analysis.
 
-Run:
+| Corpus | Method | Recall@5 | MRR@10 |
+|---|---|---:|---:|
+| Cloud sample | Semantic E5 | 0.750 | 0.750 |
+| Cloud sample | Keyword baseline | 0.750 | 0.625 |
+| Cloud sample | Hybrid RRF | 0.750 | 0.750 |
+| Cloud sample | Hybrid + reranker | 0.750 | 0.750 |
+| 4,000-passage local sample | Semantic E5 | 1.000 | 0.750 |
+| 4,000-passage local sample | Keyword baseline | 0.500 | 0.188 |
+| 4,000-passage local sample | Hybrid RRF | 0.750 | 0.417 |
+| 4,000-passage local sample | Hybrid + reranker | 1.000 | 0.875 |
 
-```bash
-python scripts/evaluate.py
-```
+These four queries only demonstrate the metric pipeline; they are not a full benchmark.
 
-Record the generated values here before submission:
+For a stronger result, download official development topics/qrels and run `python scripts/evaluate_official.py`. Report corpus coverage with Recall@5 and MRR@10; the supplied official evaluator currently measures semantic retrieval.
 
-| Method | Recall@5 | MRR@10 |
-|---|---:|---:|
-| Multilingual E5 semantic search | 0.750 | 0.750 |
-| Keyword baseline | 0.750 | 0.625 |
+## Limitations
 
-The evaluation sample is intended to demonstrate the metric pipeline, not to represent a statistically complete MIRACL benchmark.
+- The bundled four-query metric sample is not statistically representative.
+- Automatic language identification uses scripts and simple word markers and can misclassify short queries.
+- Exact vector scoring scales linearly with the number of passages.
+- The cross-encoder requires a separate model download and adds CPU latency.
+- The system retrieves evidence and excerpts sentences; it does not generate or translate answers.
 
-For a stronger experiment, run `scripts/download_miracl_dev.py` and `scripts/evaluate_official.py`. The official evaluator reports how many development queries are covered by the selected local corpus before calculating retrieval metrics. This prevents a small sample from being incorrectly presented as a full benchmark.
+## Future work
 
-Example bounded run on the included 4,000-passage local corpus: 31 of 4,693 official topics were covered (0.7%), with Recall@5 of 0.935 and MRR@10 of 0.754. The low coverage is expected because the full MIRACL corpus is not bundled.
+- Compare the four methods on all official development queries.
+- Add approximate nearest-neighbor search if measured full-index latency requires it.
+- Add quality analysis by language and query type.
+- Improve language identification and evaluate cross-language retrieval separately.
 
-## 6. Limitations
+## Conclusion
 
-- The bundled corpus is small and does not represent the full MIRACL distribution.
-- NumPy ranking is linear in the number of passages.
-- Retrieval quality depends on the pretrained embedding model.
-- The system retrieves passages but does not generate answers or citations.
-- The model requires an initial online download.
-- The comparison set is intentionally small and is not a full MIRACL benchmark.
-- Extractive answers are sentence selections, not independent natural-language reasoning.
-- Automatic language detection is script/marker based and can be imperfect for short text.
-
-## 7. Future Scope
-
-- Index the complete MIRACL corpus with FAISS or a vector database.
-- Add all available MIRACL languages.
-- Compare BM25, multilingual E5, and a reranked hybrid system.
-- Add query translation and language identification.
-- Add answer generation with retrieved passages as context.
-- Index the complete MIRACL corpus and evaluate on the official development queries and qrels.
-
-## 8. Conclusion
-
-The project demonstrates the complete pipeline of a multilingual semantic search system: data loading, multilingual representation, similarity-based ranking, web presentation, and metric evaluation. Its small design makes the core method easy to understand while leaving clear paths for scaling.
+The project demonstrates an end-to-end multilingual retrieval workflow, from MIRACL ingestion and indexing to ranked, inspectable evidence. The small hosted sample keeps the demo practical, while the local index makes larger experiments possible.

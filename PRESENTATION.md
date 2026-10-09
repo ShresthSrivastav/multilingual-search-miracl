@@ -1,68 +1,62 @@
 # Presentation Outline: Multilingual Search Using MIRACL
 
-## Slide 1 — Title
+## Slide 1 - Title
 
 Multilingual Search Using MIRACL
 
-## Slide 2 — Problem Statement
+## Slide 2 - Problem
 
-Keyword search often struggles with different languages, scripts, and paraphrased queries. The project explores semantic retrieval across multiple languages.
+Keyword matching misses paraphrases and does not naturally bridge language differences. This project compares lexical and multilingual semantic retrieval.
 
-## Slide 3 — What Is MIRACL?
+## Slide 3 - Dataset
 
-MIRACL is a multilingual information-retrieval dataset containing Wikipedia passages and relevance data across many languages.
+MIRACL is a multilingual Wikipedia passage retrieval dataset. The app uses a small balanced cloud sample and can build a local index from all 18 language shards.
 
-## Slide 4 — Project Objectives
+## Slide 4 - Objectives
 
-- Build a working multilingual search demo
-- Search English, Hindi, Spanish, and Arabic passages
-- Rank results using semantic similarity
-- Measure retrieval quality
+- Search in multiple languages
+- Compare semantic, keyword, hybrid, and reranked methods
+- Evaluate retrieval with standard ranking metrics
+- Show inspectable evidence for every result
 
-## Slide 5 — System Architecture
+## Slide 5 - Architecture
 
-User query → multilingual embedding model → cosine similarity → ranked MIRACL passages
+Query -> E5 embedding and SQLite FTS -> rank fusion -> optional cross-encoder -> highlighted passages
 
-## Slide 6 — Technology Stack
+## Slide 6 - Methods
 
-Python, Streamlit, Sentence Transformers, multilingual E5, NumPy, JSONL, Hugging Face dataset API.
+Explain E5 query/passage prefixes and cosine similarity, SQLite full-text candidates, reciprocal-rank fusion, and multilingual reranking.
 
-## Slide 7 — Search Workflow
+## Slide 7 - Full corpus index
 
-1. Read the selected language corpus.
-2. Encode passages with the `passage:` prefix.
-3. Encode the user query with the `query:` prefix.
-4. Compute similarity scores.
-5. Display the top-k passages.
+The builder batches vectors into memory-mapped files and stores passage text for retrieval. Exact vector search has bounded RAM usage but still scans the vectors.
 
-## Slide 8 — User Interface and Analysis
+## Slide 8 - Application
 
-Show the automatic language selector, example queries, top-k slider, score, document ID, title, passage text, and Analysis tab with corpus statistics and evaluation metrics.
+Show Search, Compare methods, and Analysis tabs; demonstrate highlighted query evidence and language distribution charts.
 
-## Slide 9 — Baseline Comparison and Limitations
+## Slide 9 - Evaluation and limitations
 
-Compare multilingual E5 semantic search against the TF-IDF-style keyword baseline using Recall@5 and MRR@10. Discuss small sample size, model download requirement, and linear NumPy ranking.
+Show Recall@5 and MRR@10. Explain why the four-query classroom sample is only a pipeline demo; propose official MIRACL dev topics for stronger evidence.
 
-## Slide 10 — Grounded Answers, Conclusion, and Future Work
+## Slide 10 - Conclusion and future scope
 
-The app extracts an answer candidate only from the best retrieved passage. Future work includes full-corpus indexing, more languages, reranking, and optional generative answer synthesis with citations.
+Summarize retrieval comparison and grounded evidence. Future work: all-query evaluation, approximate indexing if latency measurements justify it, and stronger per-language analysis.
 
-## Viva Questions
+## Viva questions
 
 1. What is multilingual semantic search?
-2. What is MIRACL used for?
-3. Why use embeddings instead of exact keyword matching?
-4. Why are `query:` and `passage:` prefixes used?
-5. What is cosine similarity?
-6. Why are embeddings normalized?
-7. What does top-k mean?
-8. What is Recall@5?
-9. What is MRR@10?
-10. Why is the full MIRACL corpus not bundled?
-11. How would you scale this system?
-12. What is the difference between retrieval and answer generation?
-13. Why is a keyword baseline useful in an information-retrieval project?
-14. What would happen if the corpus were expanded to millions of passages?
-15. How does the extractive answer layer avoid hallucination?
-16. Why should corpus coverage be reported during evaluation?
-17. Does the project use Ollama? Why or why not?
+2. What is MIRACL and what does a passage contain?
+3. Why does E5 use `query:` and `passage:` prefixes?
+4. How does cosine similarity rank passages?
+5. What does SQLite FTS5 do in this project?
+6. How does reciprocal-rank fusion combine rankings?
+7. What is the role of the cross-encoder reranker?
+8. What does Recall@5 measure?
+9. What does MRR@10 measure?
+10. Why store a full index locally?
+11. What tradeoff remains with exact vector search?
+12. How does highlighting help verify retrieved evidence?
+13. Why is a four-query evaluation insufficient as a benchmark?
+14. How can the app be evaluated fairly across languages?
+15. Does the app generate answers or retrieve source text?
