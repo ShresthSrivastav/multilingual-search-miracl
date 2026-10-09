@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from search_engine import Document, diversify_ranked, extractive_answer, filter_documents, keyword_rank, rank_embeddings
+from search_engine import Document, detect_language, diversify_ranked, extractive_answer, filter_documents, keyword_rank, rank_embeddings
 
 
 class SearchEngineTests(unittest.TestCase):
@@ -43,6 +43,12 @@ class SearchEngineTests(unittest.TestCase):
         answer = extractive_answer("Where does solar power come from?", text)
         self.assertIn("Solar power comes from sunlight.", answer)
         self.assertNotIn("generated", answer)
+
+    def test_detects_query_language(self):
+        self.assertEqual(detect_language("भारत की राजधानी"), "hi")
+        self.assertEqual(detect_language("ما هو الماء؟"), "ar")
+        self.assertEqual(detect_language("¿Qué es Andorra?"), "es")
+        self.assertEqual(detect_language("What is anarchism?"), "en")
 
 
 if __name__ == "__main__":

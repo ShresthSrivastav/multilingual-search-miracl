@@ -9,6 +9,7 @@ A college-level semantic search project built with Python, Streamlit, NumPy, and
 - Ranked results with cosine similarity scores
 - Keyword baseline for an explainable comparison
 - Grounded extractive answer candidate from the best retrieved passage
+- In-app Analysis tab with corpus statistics and demo evaluation
 - Reproducible sampler for the official MIRACL corpus
 - Recall@5 and MRR@10 evaluation script
 - Plain unit tests for the ranking and filtering logic
@@ -57,7 +58,9 @@ python -m streamlit run app.py
 
 If the `streamlit` command is already mapped to the active virtual environment, `streamlit run app.py` works as well.
 
-Try the provided example queries or enter a query in any of the four supported languages. The model encodes queries with the `query: ` prefix and passages with the `passage: ` prefix because this is the format used during E5 training.
+Try the provided example queries or enter a query in any of the four supported languages. Automatic language mode detects English, Hindi, Spanish, or Arabic and searches that language first; choose All languages for cross-language retrieval. The model encodes queries with the `query: ` prefix and passages with the `passage: ` prefix because this is the format used during E5 training.
+
+The Analysis tab shows passage/article counts by language, runs the bundled semantic-vs-keyword evaluation, displays official MIRACL file counts, and documents the runtime. The project does not use Ollama; it uses Sentence Transformers with PyTorch and the multilingual E5 model.
 
 ## Refresh the MIRACL sample
 

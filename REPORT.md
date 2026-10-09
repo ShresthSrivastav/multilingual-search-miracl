@@ -44,7 +44,7 @@ The project also includes a dependency-free TF-IDF-style keyword baseline. It us
 
 ### Interface
 
-The Streamlit interface provides a language filter, top-k control, search-method selector, example queries, and ranked result cards. Expensive model loading and corpus encoding are cached.
+The Streamlit interface provides a language filter, automatic query-language detection, top-k control, search-method selector, example queries, ranked result cards, and an Analysis tab. The Analysis tab reports corpus statistics, language distribution, demo metrics, official MIRACL file counts, and runtime details. Expensive model loading and corpus encoding are cached.
 
 The interface displays an extractive answer candidate from the highest-ranked passage. The answer is made from source sentences only, with a visible document ID, so the system does not present unsupported generated text as fact.
 
@@ -94,6 +94,7 @@ Example bounded run on the included 4,000-passage local corpus: 31 of 4,693 offi
 - The model requires an initial online download.
 - The comparison set is intentionally small and is not a full MIRACL benchmark.
 - Extractive answers are sentence selections, not independent natural-language reasoning.
+- Automatic language detection is script/marker based and can be imperfect for short text.
 
 ## 7. Future Scope
 

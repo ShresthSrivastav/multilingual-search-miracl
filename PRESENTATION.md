@@ -35,9 +35,9 @@ Python, Streamlit, Sentence Transformers, multilingual E5, NumPy, JSONL, Hugging
 4. Compute similarity scores.
 5. Display the top-k passages.
 
-## Slide 8 — User Interface
+## Slide 8 — User Interface and Analysis
 
-Show the language selector, example queries, top-k slider, score, document ID, title, and passage text.
+Show the automatic language selector, example queries, top-k slider, score, document ID, title, passage text, and Analysis tab with corpus statistics and evaluation metrics.
 
 ## Slide 9 — Baseline Comparison and Limitations
 
@@ -65,3 +65,4 @@ The app extracts an answer candidate only from the best retrieved passage. Futur
 14. What would happen if the corpus were expanded to millions of passages?
 15. How does the extractive answer layer avoid hallucination?
 16. Why should corpus coverage be reported during evaluation?
+17. Does the project use Ollama? Why or why not?

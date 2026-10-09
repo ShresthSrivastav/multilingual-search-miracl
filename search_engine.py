@@ -16,6 +16,7 @@ import numpy as np
 SUPPORTED_LANGUAGES = {"en": "English", "hi": "Hindi", "es": "Spanish", "ar": "Arabic"}
 TOKEN_PATTERN = re.compile(r"\w+", re.UNICODE)
 SENTENCE_PATTERN = re.compile(r"(?<=[.!?\u0964\u0965؟])\s+|\n+")
+SPANISH_MARKERS = {"qué", "cuál", "cuáles", "cómo", "dónde", "es", "una", "el", "la", "los", "las", "de", "para"}
 
 
 @dataclass(frozen=True)
@@ -24,6 +25,18 @@ class Document:
     title: str
     text: str
     language: str
+
+
+def detect_language(text: str) -> str:
+    """Lightweight script/marker detection for choosing a corpus language."""
+    if re.search(r"[\u0900-\u097F]", text):
+        return "hi"
+    if re.search(r"[\u0600-\u06FF]", text):
+        return "ar"
+    terms = set(TOKEN_PATTERN.findall(text.casefold()))
+    if re.search(r"[¿¡áéíóúñ]", text.casefold()) or len(terms & SPANISH_MARKERS) >= 2:
+        return "es"
+    return "en"
 
 
 def load_documents(path: str | Path) -> list[Document]:
