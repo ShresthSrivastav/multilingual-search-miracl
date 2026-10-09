@@ -6,7 +6,7 @@ import os
 import streamlit as st
 from sentence_transformers import SentenceTransformer
 
-from search_engine import SUPPORTED_LANGUAGES, Document, filter_documents, keyword_rank, load_documents, rank_embeddings
+from search_engine import SUPPORTED_LANGUAGES, Document, diversify_ranked, filter_documents, keyword_rank, load_documents, rank_embeddings
 
 
 ROOT = Path(__file__).parent
@@ -27,17 +27,19 @@ def encode_documents(_model: SentenceTransformer, documents: tuple[Document, ...
 
 
 def search(model: SentenceTransformer, documents: list[Document], query: str, top_k: int):
-    if not query.strip():
+    if not query.strip() or not documents:
         return []
     embeddings = encode_documents(model, tuple(documents))
     query_embedding = model.encode([f"query: {query.strip()}"], normalize_embeddings=True, show_progress_bar=False)[0]
-    return [(documents[index], score) for index, score in rank_embeddings(query_embedding, embeddings, top_k)]
+    ranked = rank_embeddings(query_embedding, embeddings, min(len(documents), top_k * 3))
+    return [(documents[index], score) for index, score in diversify_ranked(ranked, documents, top_k)]
 
 
 def keyword_search(documents: list[Document], query: str, top_k: int):
-    if not query.strip():
+    if not query.strip() or not documents:
         return []
-    return [(documents[index], score) for index, score in keyword_rank(query, documents, top_k)]
+    ranked = keyword_rank(query, documents, min(len(documents), top_k * 3))
+    return [(documents[index], score) for index, score in diversify_ranked(ranked, documents, top_k)]
 
 
 def corpus_examples(documents: list[Document]) -> dict[str, str]:

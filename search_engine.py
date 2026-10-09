@@ -109,6 +109,26 @@ def keyword_rank(query: str, documents: Sequence[Document], top_k: int = 5) -> l
     return sorted(scores, key=lambda item: (-item[1], item[0]))[:top_k]
 
 
+def diversify_ranked(
+    ranked: Sequence[tuple[int, float]], documents: Sequence[Document], top_k: int
+) -> list[tuple[int, float]]:
+    """Prefer different article titles before returning more passages from one article."""
+    if top_k < 1:
+        raise ValueError("top_k must be at least 1")
+    selected: list[tuple[int, float]] = []
+    seen_titles: set[str] = set()
+    for require_new_title in (True, False):
+        for index, score in ranked:
+            is_new_title = documents[index].title not in seen_titles
+            if require_new_title and not is_new_title:
+                continue
+            selected.append((index, score))
+            seen_titles.add(documents[index].title)
+            if len(selected) == top_k:
+                return selected
+    return selected
+
+
 def recall_at_k(results: Sequence[str], relevant: set[str], k: int) -> float:
     if not relevant:
         return 0.0

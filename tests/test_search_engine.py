@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from search_engine import Document, filter_documents, keyword_rank, rank_embeddings
+from search_engine import Document, diversify_ranked, filter_documents, keyword_rank, rank_embeddings
 
 
 class SearchEngineTests(unittest.TestCase):
@@ -28,6 +28,15 @@ class SearchEngineTests(unittest.TestCase):
             Document("2", "Ocean", "The ocean contains salt water.", "en"),
         ]
         self.assertEqual(keyword_rank("solar power", documents, top_k=1)[0][0], 0)
+
+    def test_diversifies_article_titles(self):
+        documents = [
+            Document("1", "Same article", "first", "en"),
+            Document("2", "Same article", "second", "en"),
+            Document("3", "Different article", "third", "en"),
+        ]
+        ranked = diversify_ranked([(0, 1.0), (1, 0.9), (2, 0.8)], documents, top_k=2)
+        self.assertEqual([index for index, _ in ranked], [0, 2])
 
 
 if __name__ == "__main__":
