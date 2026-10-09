@@ -7,4 +7,5 @@ venv/
 data/*.cache
 data/local_corpus.jsonl
 data/miracl_dev_*.jsonl
+data/miracl_full/
 models/
