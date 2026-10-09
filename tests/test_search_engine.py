@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from search_engine import Document, diversify_ranked, filter_documents, keyword_rank, rank_embeddings
+from search_engine import Document, diversify_ranked, extractive_answer, filter_documents, keyword_rank, rank_embeddings
 
 
 class SearchEngineTests(unittest.TestCase):
@@ -37,6 +37,12 @@ class SearchEngineTests(unittest.TestCase):
         ]
         ranked = diversify_ranked([(0, 1.0), (1, 0.9), (2, 0.8)], documents, top_k=2)
         self.assertEqual([index for index, _ in ranked], [0, 2])
+
+    def test_extractive_answer_uses_source_text(self):
+        text = "Solar power comes from sunlight. Oceans contain salt water."
+        answer = extractive_answer("Where does solar power come from?", text)
+        self.assertIn("Solar power comes from sunlight.", answer)
+        self.assertNotIn("generated", answer)
 
 
 if __name__ == "__main__":

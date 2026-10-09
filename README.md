@@ -8,6 +8,7 @@ A college-level semantic search project built with Python, Streamlit, NumPy, and
 - Language filtering and configurable top-k results
 - Ranked results with cosine similarity scores
 - Keyword baseline for an explainable comparison
+- Grounded extractive answer candidate from the best retrieved passage
 - Reproducible sampler for the official MIRACL corpus
 - Recall@5 and MRR@10 evaluation script
 - Plain unit tests for the ranking and filtering logic
@@ -23,7 +24,9 @@ A college-level semantic search project built with Python, Streamlit, NumPy, and
 │   └── eval_queries.jsonl
 ├── scripts/
 │   ├── download_sample.py
-│   └── evaluate.py
+│   ├── download_miracl_dev.py
+│   ├── evaluate.py
+│   └── evaluate_official.py
 ├── tests/test_search_engine.py
 ├── REPORT.md
 ├── PRESENTATION.md
@@ -81,6 +84,19 @@ python scripts/evaluate.py
 ```
 
 The evaluation file contains four demonstration queries and their relevant document IDs. The script compares semantic retrieval with the keyword baseline and prints Recall@5, MRR@10, and the number of evaluation queries.
+
+## Evaluate with official MIRACL development data
+
+Download official MIRACL development topics and positive relevance judgments for the supported languages:
+
+```bash
+python scripts/download_miracl_dev.py
+python scripts/evaluate_official.py
+```
+
+The official evaluator reports corpus coverage as well as Recall@5 and MRR@10. A small/local corpus will cover only the queries whose relevant documents are present locally; use the full MIRACL corpus when storage and download time allow. The official evaluation files are ignored by Git so they do not enlarge the cloud deployment. On the included 4,000-passage local corpus, a bounded 100-query run covered 31 of 4,693 topics (0.7%), with Recall@5 0.935 and MRR@10 0.754; the low coverage is why this is not presented as a full benchmark.
+
+The UI also shows a grounded answer candidate. It selects one or two sentences from the highest-ranked passage and never invents text. This is intentionally extractive; it is safer and easier to explain than adding an unauthenticated generative model.
 
 ## Run tests
 

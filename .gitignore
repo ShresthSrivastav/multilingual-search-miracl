@@ -6,4 +6,5 @@ venv/
 *.pyc
 data/*.cache
 data/local_corpus.jsonl
+data/miracl_dev_*.jsonl
 models/

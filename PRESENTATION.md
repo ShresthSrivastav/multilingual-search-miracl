@@ -43,9 +43,9 @@ Show the language selector, example queries, top-k slider, score, document ID, t
 
 Compare multilingual E5 semantic search against the TF-IDF-style keyword baseline using Recall@5 and MRR@10. Discuss small sample size, model download requirement, and linear NumPy ranking.
 
-## Slide 10 — Conclusion and Future Work
+## Slide 10 — Grounded Answers, Conclusion, and Future Work
 
-Scale to the complete corpus, add languages, compare hybrid retrieval, and add reranking or answer generation.
+The app extracts an answer candidate only from the best retrieved passage. Future work includes full-corpus indexing, more languages, reranking, and optional generative answer synthesis with citations.
 
 ## Viva Questions
 
@@ -63,3 +63,5 @@ Scale to the complete corpus, add languages, compare hybrid retrieval, and add r
 12. What is the difference between retrieval and answer generation?
 13. Why is a keyword baseline useful in an information-retrieval project?
 14. What would happen if the corpus were expanded to millions of passages?
+15. How does the extractive answer layer avoid hallucination?
+16. Why should corpus coverage be reported during evaluation?

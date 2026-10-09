@@ -12,6 +12,7 @@ This project implements a multilingual semantic search system using a sample of 
 4. Evaluate retrieval with Recall@5 and MRR@10.
 5. Provide a reproducible and explainable college-level implementation.
 6. Compare semantic retrieval with a traditional keyword baseline.
+7. Produce a grounded answer candidate using only retrieved evidence.
 
 ## 2. Dataset
 
@@ -44,6 +45,8 @@ The project also includes a dependency-free TF-IDF-style keyword baseline. It us
 ### Interface
 
 The Streamlit interface provides a language filter, top-k control, search-method selector, example queries, and ranked result cards. Expensive model loading and corpus encoding are cached.
+
+The interface displays an extractive answer candidate from the highest-ranked passage. The answer is made from source sentences only, with a visible document ID, so the system does not present unsupported generated text as fact.
 
 ## 4. System Design
 
@@ -78,6 +81,10 @@ Record the generated values here before submission:
 
 The evaluation sample is intended to demonstrate the metric pipeline, not to represent a statistically complete MIRACL benchmark.
 
+For a stronger experiment, run `scripts/download_miracl_dev.py` and `scripts/evaluate_official.py`. The official evaluator reports how many development queries are covered by the selected local corpus before calculating retrieval metrics. This prevents a small sample from being incorrectly presented as a full benchmark.
+
+Example bounded run on the included 4,000-passage local corpus: 31 of 4,693 official topics were covered (0.7%), with Recall@5 of 0.935 and MRR@10 of 0.754. The low coverage is expected because the full MIRACL corpus is not bundled.
+
 ## 6. Limitations
 
 - The bundled corpus is small and does not represent the full MIRACL distribution.
@@ -86,6 +93,7 @@ The evaluation sample is intended to demonstrate the metric pipeline, not to rep
 - The system retrieves passages but does not generate answers or citations.
 - The model requires an initial online download.
 - The comparison set is intentionally small and is not a full MIRACL benchmark.
+- Extractive answers are sentence selections, not independent natural-language reasoning.
 
 ## 7. Future Scope
 
@@ -94,7 +102,7 @@ The evaluation sample is intended to demonstrate the metric pipeline, not to rep
 - Compare BM25, multilingual E5, and a reranked hybrid system.
 - Add query translation and language identification.
 - Add answer generation with retrieved passages as context.
-- Evaluate on the official MIRACL development queries and qrels.
+- Index the complete MIRACL corpus and evaluate on the official development queries and qrels.
 
 ## 8. Conclusion
 

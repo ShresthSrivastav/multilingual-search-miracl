@@ -15,6 +15,7 @@ import numpy as np
 
 SUPPORTED_LANGUAGES = {"en": "English", "hi": "Hindi", "es": "Spanish", "ar": "Arabic"}
 TOKEN_PATTERN = re.compile(r"\w+", re.UNICODE)
+SENTENCE_PATTERN = re.compile(r"(?<=[.!?\u0964\u0965؟])\s+|\n+")
 
 
 @dataclass(frozen=True)
@@ -127,6 +128,25 @@ def diversify_ranked(
             if len(selected) == top_k:
                 return selected
     return selected
+
+
+def extractive_answer(query: str, text: str, max_sentences: int = 2) -> str:
+    """Select supporting sentences from a passage; never invents text."""
+    if max_sentences < 1:
+        raise ValueError("max_sentences must be at least 1")
+    sentences = [sentence.strip() for sentence in SENTENCE_PATTERN.split(text) if sentence.strip()]
+    if not sentences:
+        return ""
+    query_terms = set(TOKEN_PATTERN.findall(query.casefold()))
+    if not query_terms:
+        return " ".join(sentences[:max_sentences])
+    scored = []
+    for index, sentence in enumerate(sentences):
+        sentence_terms = set(TOKEN_PATTERN.findall(sentence.casefold()))
+        overlap = len(query_terms & sentence_terms)
+        scored.append((overlap, -index, sentence))
+    selected = sorted(scored, reverse=True)[:max_sentences]
+    return " ".join(sentence for _, _, sentence in sorted(selected, key=lambda item: -item[1]))
 
 
 def recall_at_k(results: Sequence[str], relevant: set[str], k: int) -> float:

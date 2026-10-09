@@ -6,7 +6,7 @@ import os
 import streamlit as st
 from sentence_transformers import SentenceTransformer
 
-from search_engine import SUPPORTED_LANGUAGES, Document, diversify_ranked, filter_documents, keyword_rank, load_documents, rank_embeddings
+from search_engine import SUPPORTED_LANGUAGES, Document, diversify_ranked, extractive_answer, filter_documents, keyword_rank, load_documents, rank_embeddings
 
 
 ROOT = Path(__file__).parent
@@ -92,6 +92,11 @@ if query.strip():
     st.subheader(f"Top {len(results)} results")
     if not results:
         st.info("No matching documents were found.")
+    else:
+        answer_document, answer_score = results[0]
+        with st.expander("Grounded answer candidate", expanded=True):
+            st.info(extractive_answer(query, answer_document.text))
+            st.caption(f"Taken only from: {answer_document.title} · {answer_document.docid} · score {answer_score:.4f}")
     for rank, (document, score) in enumerate(results, start=1):
         st.markdown(f"### {rank}. {document.title}")
         score_name = "cosine score" if search_method == "Semantic (multilingual E5)" else "TF-IDF score"
