@@ -73,8 +73,8 @@ Record the generated values here before submission:
 
 | Method | Recall@5 | MRR@10 |
 |---|---:|---:|
-| Multilingual E5 semantic search | 1.000 | 0.875 |
-| Keyword baseline | 1.000 | 0.633 |
+| Multilingual E5 semantic search | 0.750 | 0.750 |
+| Keyword baseline | 0.750 | 0.625 |
 
 The evaluation sample is intended to demonstrate the metric pipeline, not to represent a statistically complete MIRACL benchmark.
 

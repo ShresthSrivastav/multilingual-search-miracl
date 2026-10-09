@@ -72,7 +72,7 @@ $env:MIRACL_CORPUS_PATH = "data/local_corpus.jsonl"  # PowerShell
 python -m streamlit run app.py
 ```
 
-On macOS/Linux, use `export MIRACL_CORPUS_PATH=data/local_corpus.jsonl`. The script uses the Hugging Face dataset-row API in batches, so it does not download the complete multi-gigabyte corpus. The cloud profile writes `data/sample_corpus.jsonl`; the local profile writes `data/local_corpus.jsonl`, which is excluded from GitHub.
+On macOS/Linux, use `export MIRACL_CORPUS_PATH=data/local_corpus.jsonl`. The script uses the Hugging Face dataset-row API in evenly spaced batches across each language, so it does not download the complete multi-gigabyte corpus or concentrate only on alphabetically early topics. The cloud profile writes `data/sample_corpus.jsonl`; the local profile writes `data/local_corpus.jsonl`, which is excluded from GitHub.
 
 ## Evaluate retrieval
 

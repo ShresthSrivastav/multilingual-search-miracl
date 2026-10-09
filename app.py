@@ -40,9 +40,20 @@ def keyword_search(documents: list[Document], query: str, top_k: int):
     return [(documents[index], score) for index, score in keyword_rank(query, documents, top_k)]
 
 
+def corpus_examples(documents: list[Document]) -> dict[str, str]:
+    """Use topics that actually exist in the selected corpus profile."""
+    examples: dict[str, str] = {}
+    for code, name in SUPPORTED_LANGUAGES.items():
+        for document in documents:
+            if document.language == code:
+                examples[f"{name}: {document.title}"] = document.title
+                break
+    return examples
+
+
 st.set_page_config(page_title="MIRACL Multilingual Search", page_icon="🌍", layout="wide")
 st.title("🌍 Multilingual MIRACL Search")
-st.caption("Semantic search over a small MIRACL-derived corpus using multilingual-e5-small.")
+st.caption("Semantic search over a MIRACL-derived corpus using multilingual-e5-small. Results are ranked passages, not generated answers.")
 
 try:
     all_documents = load_documents(CORPUS_PATH)
@@ -64,13 +75,9 @@ with st.sidebar:
     st.markdown("[Refresh the sample](https://huggingface.co/datasets/miracl/miracl-corpus)")
 
 documents = filter_documents(all_documents, selected_language)
-examples = {
-    "English": "What is the largest planet in the Solar System?",
-    "Hindi": "भारत की राजधानी क्या है?",
-    "Spanish": "¿Qué es la energía solar?",
-    "Arabic": "ما هي اللغة العربية؟",
-}
+examples = corpus_examples(all_documents)
 selected_example = st.selectbox("Try an example query", ["Choose an example…", *examples])
+st.caption("Examples are taken from topics present in the loaded corpus, so they always have a matching document.")
 default_query = "" if selected_example == "Choose an example…" else examples[selected_example]
 query = st.text_input("Enter a search query", value=default_query, placeholder="Ask in any supported language…")
 
@@ -85,7 +92,8 @@ if query.strip():
         st.info("No matching documents were found.")
     for rank, (document, score) in enumerate(results, start=1):
         st.markdown(f"### {rank}. {document.title}")
-        st.caption(f"{SUPPORTED_LANGUAGES[document.language]} · {document.docid} · cosine score {score:.4f}")
+        score_name = "cosine score" if search_method == "Semantic (multilingual E5)" else "TF-IDF score"
+        st.caption(f"{SUPPORTED_LANGUAGES[document.language]} · {document.docid} · {score_name} {score:.4f}")
         st.write(document.text)
         st.divider()
 else:
