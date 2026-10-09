@@ -28,12 +28,16 @@ from vector_index import LocalIndex
 ROOT = Path(__file__).parent
 MODEL_NAME = "intfloat/multilingual-e5-small"
 RERANKER_NAME = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
-CORPUS_PATH = Path(os.getenv("MIRACL_CORPUS_PATH", ROOT / "data" / "sample_corpus.jsonl"))
+LOCAL_SAMPLE_PATH = ROOT / "data" / "local_corpus.jsonl"
+DEMO_SAMPLE_PATH = ROOT / "data" / "sample_corpus.jsonl"
+DEFAULT_CORPUS_PATH = LOCAL_SAMPLE_PATH if LOCAL_SAMPLE_PATH.exists() else DEMO_SAMPLE_PATH
+CORPUS_PATH = Path(os.getenv("MIRACL_CORPUS_PATH", DEFAULT_CORPUS_PATH))
 if not CORPUS_PATH.is_absolute():
     CORPUS_PATH = ROOT / CORPUS_PATH
 INDEX_PATH = Path(os.getenv("MIRACL_INDEX_PATH", ROOT / "data" / "miracl_index"))
 if not INDEX_PATH.is_absolute():
     INDEX_PATH = ROOT / INDEX_PATH
+FULL_CORPUS_PATH = ROOT / "data" / "miracl_full"
 
 
 @st.cache_resource(show_spinner="Loading multilingual embedding model...")
@@ -42,8 +46,15 @@ def load_model():
 
 
 @st.cache_resource(show_spinner="Loading local MIRACL index...")
-def load_index(path: str):
+def load_index(path: str, manifest_modified_ns: int):
+    del manifest_modified_ns  # Reload the cached index whenever a resumable build advances.
     return LocalIndex(path)
+
+
+@st.cache_data(show_spinner="Loading MIRACL passages...")
+def load_corpus(path: str, modified_ns: int):
+    del modified_ns  # The modification time is a cache key for refreshed corpus files.
+    return load_documents(Path(path))
 
 
 @st.cache_resource(show_spinner="Loading multilingual reranker...")
@@ -116,13 +127,6 @@ def retrieve(model, documents, index, query: str, language: str, method: str, to
     return diversified(results, top_k)
 
 
-def corpus_examples(documents: list[Document]):
-    examples = {}
-    for doc in documents:
-        examples.setdefault(f"{SUPPORTED_LANGUAGES[doc.language]}: {doc.title}", doc.title)
-    return examples
-
-
 def highlight(text: str, query: str) -> str:
     terms = list(dict.fromkeys(re.findall(r"\w+", query, flags=re.UNICODE)))
     escaped = escape(text)
@@ -136,14 +140,22 @@ def render_results(results, query: str, method: str):
     if not results:
         st.info("No matching passages found. Try All languages or a larger corpus.")
         return
-    doc, score = results[0]
-    with st.expander("Evidence based answer excerpt", expanded=True):
-        st.markdown(highlight(extractive_answer(query, doc.text), query), unsafe_allow_html=True)
-        st.caption(f"Source: {doc.title} · {doc.language.upper()} · {doc.docid} · score {score:.4f}")
     for rank, (doc, score) in enumerate(results, 1):
-        st.markdown(f"#### {rank}. {doc.title}")
-        st.caption(f"{SUPPORTED_LANGUAGES[doc.language]} · {doc.docid} · score {score:.4f}")
-        st.markdown(highlight(doc.text, query), unsafe_allow_html=True)
+        title = escape(doc.title)
+        language = escape(SUPPORTED_LANGUAGES.get(doc.language, doc.language))
+        docid = escape(doc.docid)
+        excerpt = highlight(doc.text, query)
+        st.markdown(
+            f"""<article class="result-card">
+                <div class="result-topline"><span class="result-rank">{rank:02}</span>
+                <span class="result-language">{language}</span>
+                <span class="result-score">{score:.4f}</span></div>
+                <h3>{title}</h3>
+                <p class="result-passage">{excerpt}</p>
+                <div class="result-source">MIRACL · {docid}</div>
+            </article>""",
+            unsafe_allow_html=True,
+        )
 
 
 def read_snapshot():
@@ -162,13 +174,56 @@ def jsonl_count(path: Path) -> int:
 
 
 st.set_page_config(page_title="MIRACL Multilingual Search", layout="wide")
-st.title("Multilingual MIRACL Search")
-st.caption("Search MIRACL passages using multilingual E5, hybrid retrieval, and an optional multilingual reranker.")
+st.markdown(
+    """<style>
+    :root { color-scheme:light; --ink:#182b3a; --muted:#526371; --line:#d6e0e5; --accent:#a94325; --paper:#fff; }
+    html, body, [class], [data-testid="stAppViewContainer"] { color:var(--ink); }
+    .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"] { background:#f3f6f8 !important; color:var(--ink) !important; }
+    [data-testid="stHeader"] { background:rgba(243,246,248,.96); }
+    .block-container { max-width:1280px; padding-top:2.1rem; padding-bottom:3.5rem; }
+    [data-testid="stSidebar"], [data-testid="stSidebar"] > div { background:#eaf0f3 !important; border-right:1px solid var(--line); }
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] { color:#203746 !important; }
+    [data-testid="stMarkdownContainer"] p, [data-testid="stCaptionContainer"] { color:#405361; }
+    h1,h2,h3,h4, label { color:var(--ink) !important; letter-spacing:-.015em; }
+    h1 { font-size:2.35rem !important; font-weight:750 !important; }
+    [data-testid="stTabs"] [data-baseweb="tab-list"] { gap:.45rem; border-bottom:1px solid var(--line); }
+    [data-testid="stTabs"] [data-baseweb="tab"] { padding:.8rem 1.05rem; color:#405361 !important; }
+    [data-testid="stTabs"] [aria-selected="true"] { color:#8f351b !important; }
+    [data-testid="stMetric"] { background:var(--paper) !important; border:1px solid var(--line); border-radius:14px; padding:1rem 1.1rem; box-shadow:0 3px 14px #18324808; }
+    [data-testid="stMetricLabel"], [data-testid="stMetricValue"], [data-testid="stMetricDelta"] { color:#203746 !important; }
+    [data-testid="stTextInput"] input, [data-testid="stTextArea"] textarea, [data-testid="stNumberInput"] input, [data-baseweb="select"] > div { color:#182b3a !important; background:#fff !important; border-color:#aabac4 !important; }
+    [data-testid="stTextInput"] input::placeholder, [data-testid="stTextArea"] textarea::placeholder { color:#667984 !important; opacity:1; }
+    [role="listbox"], [role="option"] { color:#182b3a !important; background:#fff !important; }
+    div.stButton > button { border-radius:10px; font-weight:650; color:#183243 !important; background:#fff !important; border-color:#aabac4 !important; }
+    div.stButton > button[kind="primary"] { color:#fff !important; background:#9b4024 !important; border-color:#9b4024 !important; }
+    [data-testid="stAlert"] { color:#203746 !important; background:#fff !important; }
+    [data-testid="stExpander"] { background:#fff; border-color:var(--line); }
+    [data-testid="stExpander"] summary, [data-testid="stExpander"] summary span { color:#203746 !important; }
+    [data-testid="stDataFrame"], [data-testid="stVegaLiteChart"] { background:var(--paper); border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+    .hero { background:linear-gradient(120deg,#17364a 0%,#245467 58%,#33756f 100%); color:white; padding:2rem 2.1rem; border-radius:20px; margin:.2rem 0 1.45rem; box-shadow:0 14px 32px #15384a20; }
+    .hero-kicker { color:#d1e5e8 !important; font-size:.72rem; font-weight:750; letter-spacing:.13em; text-transform:uppercase; }
+    .hero h1 { color:#fff !important; margin:.55rem 0 .35rem; font-size:2.15rem !important; }
+    .hero p { color:#e4eef0 !important; margin:0; max-width:720px; font-size:1.02rem; }
+    .hero-pill { display:inline-block; margin-top:1.1rem; padding:.35rem .68rem; border:1px solid #ffffff65; border-radius:99px; color:#fff !important; font-size:.78rem; }
+    .result-card { background:var(--paper); border:1px solid var(--line); border-radius:15px; padding:1.15rem 1.3rem; margin:.65rem 0; box-shadow:0 3px 12px #17344708; }
+    .result-topline { display:flex; align-items:center; gap:.6rem; margin-bottom:.45rem; }
+    .result-rank { color:#b44f31; font-weight:800; font-size:.78rem; letter-spacing:.06em; }
+    .result-language { color:#35625e; background:#e9f3ef; padding:.18rem .5rem; border-radius:99px; font-size:.72rem; font-weight:700; }
+    .result-score { margin-left:auto; color:#455763; font:600 .75rem ui-monospace,SFMono-Regular,Consolas,monospace; }
+    .result-card h3 { color:#182b3a !important; font-size:1.08rem; margin:.1rem 0 .55rem; }
+    .result-passage { color:#293e4b !important; font-size:.96rem; line-height:1.75; margin:.25rem 0 .65rem; }
+    .result-source { border-top:1px solid #e2e9ed; padding-top:.55rem; color:#526371 !important; font-size:.78rem; }
+    mark { background:#fff0bd; color:#533b15; border-radius:3px; padding:0 .08rem; }
+    @media (max-width:700px) { .block-container { padding:1rem 1rem 2rem; } .hero { padding:1.4rem; border-radius:15px; } .hero h1 { font-size:1.65rem !important; } }
+    </style>""",
+    unsafe_allow_html=True,
+)
 
-use_index = bool(str(INDEX_PATH)) and (INDEX_PATH / "manifest.json").exists()
-index = load_index(str(INDEX_PATH)) if use_index else None
+manifest_path = INDEX_PATH / "manifest.json"
+use_index = manifest_path.exists()
+index = load_index(str(INDEX_PATH), manifest_path.stat().st_mtime_ns) if use_index else None
 try:
-    all_documents = [] if index else load_documents(CORPUS_PATH)
+    all_documents = [] if index else load_corpus(str(CORPUS_PATH), CORPUS_PATH.stat().st_mtime_ns)
 except (OSError, ValueError) as exc:
     st.error(f"Could not load corpus: {exc}")
     st.stop()
@@ -177,12 +232,25 @@ available = index.languages if index else {
     code: sum(doc.language == code for doc in all_documents)
     for code in dict.fromkeys(doc.language for doc in all_documents)
 }
+full_shard_total = sum(1 for _ in FULL_CORPUS_PATH.rglob("docs-*.jsonl.gz")) if FULL_CORPUS_PATH.is_dir() else 0
+indexed_shards = len(index.manifest.get("shards", [])) if index else 0
+full_index_complete = bool(index and full_shard_total and indexed_shards >= full_shard_total)
 language_options = {"Query language (automatic)": "auto", "All languages": "all"}
 language_options.update({SUPPORTED_LANGUAGES[code]: code for code in available})
 corpus_name = f"Indexed MIRACL ({index.count:,} passages)" if index else f"{len(all_documents):,} passages ({CORPUS_PATH.name})"
+st.markdown(
+    f"""<section class="hero">
+        <div class="hero-kicker">Multilingual information retrieval · MIRACL</div>
+        <h1>Find useful passages, across languages.</h1>
+        <p>Search English, Hindi, Spanish, and Arabic with semantic, keyword, or hybrid retrieval—then inspect the source passages behind every result.</p>
+        <span class="hero-pill">{escape(corpus_name)}</span>
+    </section>""",
+    unsafe_allow_html=True,
+)
 
 with st.sidebar:
     st.header("Search settings")
+    st.caption("Tune how MIRACL ranks and filters passages.")
     language_mode = language_options[st.selectbox("Language", list(language_options))]
     top_k = st.slider("Results to show", 1, 10, 5)
     method = st.selectbox("Search method", ["Semantic (multilingual E5)", "Hybrid (semantic + keyword)", "Hybrid + reranker", "Keyword baseline"])
@@ -190,13 +258,31 @@ with st.sidebar:
     st.markdown("**Active corpus**")
     st.write(corpus_name)
     st.caption("The full indexed corpus stays on this computer; Streamlit Cloud uses its small sample.")
+    if FULL_CORPUS_PATH.is_dir() and not full_index_complete:
+        progress = f"Index build progress: {indexed_shards}/{full_shard_total} corpus shards." if index else "The full-corpus index has not started yet."
+        active_count = index.count if index else len(all_documents)
+        st.warning(
+            f"Full corpus is not fully indexed. {progress} This run searches {active_count:,} passages. Build or resume it with "
+            "`python scripts/build_index.py --source data/miracl_full --output data/miracl_index`.",
+            icon="⚠️",
+        )
 
 search_tab, compare_tab, analysis_tab = st.tabs(["Search", "Compare methods", "Analysis"])
 
 with search_tab:
-    examples = corpus_examples(all_documents) if all_documents else {}
-    example = st.selectbox("Try a corpus title", ["Choose an example...", *examples])
-    query = st.text_input("Search in your language", value=examples.get(example, ""), key="query_input", placeholder="Ask in English, Hindi, Spanish, or Arabic...")
+    examples = {
+        "English · What is anarchism?": "What is anarchism?",
+        "हिन्दी · गणेश के नाम और पूजा की विधि क्या है?": "गणेश के नाम और पूजा की विधि क्या है?",
+        "Español · ¿Cuál es el idioma oficial de Andorra?": "¿Cuál es el idioma oficial de Andorra?",
+        "العربية · ما نسبة سطح الأرض التي يغطيها الماء؟": "ما نسبة سطح الأرض التي يغطيها الماء؟",
+    }
+    example = st.selectbox("Try a sample query", ["Choose an example...", *examples])
+    if example in examples and st.session_state.get("_selected_example") != example:
+        st.session_state["query_input"] = examples[example]
+        st.session_state["_selected_example"] = example
+    elif example == "Choose an example...":
+        st.session_state["_selected_example"] = None
+    query = st.text_input("Search in your language", key="query_input", placeholder="Ask in English, Hindi, Spanish, or Arabic...")
     detected = detect_language(query) if query.strip() else "en"
     active_language = detected if language_mode == "auto" else language_mode
     if language_mode == "auto" and query.strip():
@@ -267,6 +353,12 @@ with compare_tab:
 with analysis_tab:
     st.subheader("Corpus overview")
     total = index.count if index else len(all_documents)
+    if FULL_CORPUS_PATH.is_dir() and not full_index_complete:
+        progress = f"{indexed_shards}/{full_shard_total} source shards indexed so far." if index else "No full-corpus index is active yet."
+        st.warning(
+            f"The full corpus is not fully indexed ({progress}) The active search is limited to {total:,} passages. "
+            "A local vector index is required to search the complete corpus efficiently."
+        )
     metrics = st.columns(3)
     metrics[0].metric("Passages", f"{total:,}")
     metrics[1].metric("Storage", "SQLite + mmap" if index else "JSONL sample")

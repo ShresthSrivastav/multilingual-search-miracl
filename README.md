@@ -27,14 +27,14 @@ The embedding model downloads from Hugging Face the first time semantic search i
 
 ## Local sample
 
-For the included 4,000-passage four-language corpus:
+When available, local startup automatically uses the ignored 4,000-passage four-language corpus; Streamlit Cloud falls back to the small checked-in sample.
 
 ```powershell
-$env:MIRACL_CORPUS_PATH = "data/local_corpus.jsonl"
 python -m streamlit run app.py
 ```
 
-The small checked-in `data/sample_corpus.jsonl` remains the default for Streamlit Cloud.
+Set `MIRACL_CORPUS_PATH` only when you want to choose a different corpus file. The checked-in `data/sample_corpus.jsonl` remains the Streamlit Cloud fallback.
+If `data/miracl_index/manifest.json` exists, the app automatically uses that local index instead of the JSONL sample. When the full corpus has been downloaded but not indexed, the app displays a warning and the active passage count so the demo corpus is not mistaken for full-corpus search.
 
 ## Full MIRACL local index
 
@@ -53,9 +53,10 @@ python scripts/build_index.py --source data/miracl_full --output data/miracl_ind
 Then run the app against that index:
 
 ```powershell
-$env:MIRACL_INDEX_PATH = "data/miracl_index"
 python -m streamlit run app.py
 ```
+
+The default local index path is `data/miracl_index`, so no environment variable is needed. On CPU, embedding the full corpus can take a long time; the builder reports progress and saves completed language shards so it can resume. Streamlit Cloud does not receive the ignored local corpus/index files and continues to use its bundled small sample.
 
 The builder batches normalized E5 vectors into memory-mapped files and stores searchable passage text and metadata in SQLite FTS5. It saves a manifest after each shard, so it can resume after an interruption. Similarity is exact and chunked, so RAM use is bounded but query time still grows with corpus size. For the 4,000-row local sample, use:
 
