@@ -259,7 +259,7 @@ with st.sidebar:
     st.write(corpus_name)
     st.caption("The full indexed corpus stays on this computer; Streamlit Cloud uses its small sample.")
     if FULL_CORPUS_PATH.is_dir() and not full_index_complete:
-        progress = f"Index build progress: {indexed_shards}/{full_shard_total} corpus shards." if index else "The full-corpus index has not started yet."
+        progress = f"Index build progress: {indexed_shards}/{full_shard_total} corpus shards." if index else "No full-corpus index is available yet."
         active_count = index.count if index else len(all_documents)
         st.warning(
             f"Full corpus is not fully indexed. {progress} This run searches {active_count:,} passages. Build or resume it with "
@@ -354,7 +354,7 @@ with analysis_tab:
     st.subheader("Corpus overview")
     total = index.count if index else len(all_documents)
     if FULL_CORPUS_PATH.is_dir() and not full_index_complete:
-        progress = f"{indexed_shards}/{full_shard_total} source shards indexed so far." if index else "No full-corpus index is active yet."
+        progress = f"{indexed_shards}/{full_shard_total} source shards indexed so far." if index else "No full-corpus index is available yet."
         st.warning(
             f"The full corpus is not fully indexed ({progress}) The active search is limited to {total:,} passages. "
             "A local vector index is required to search the complete corpus efficiently."
