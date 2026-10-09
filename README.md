@@ -34,9 +34,11 @@ python -m streamlit run app.py
 ```
 
 Set `MIRACL_CORPUS_PATH` only when you want to choose a different corpus file. The checked-in `data/sample_corpus.jsonl` remains the Streamlit Cloud fallback.
-If `data/miracl_index/manifest.json` exists, the app automatically uses that local index instead of the JSONL sample. When the full corpus has been downloaded but not indexed, the app displays a warning and the active passage count so the demo corpus is not mistaken for full-corpus search.
+The app uses `data/local_corpus.jsonl` by default when present. An existing index is used only when you explicitly set `MIRACL_INDEX_PATH`, so an unrelated or incomplete index cannot replace the 4,000-passage local corpus by accident.
 
-## Full MIRACL local index
+## Optional full MIRACL local index
+
+The 4,000-passage local corpus is the intended setup for this college demo; you do not need to download or index the full corpus. The following is an optional extension for machines with substantial free disk space and time.
 
 Download all 18 language shards (about 16 GB in this workspace):
 
@@ -56,7 +58,7 @@ Then run the app against that index:
 python -m streamlit run app.py
 ```
 
-The default local index path is `data/miracl_index`, so no environment variable is needed. On CPU, embedding the full corpus can take a long time; the builder reports progress and saves completed language shards so it can resume. Streamlit Cloud does not receive the ignored local corpus/index files and continues to use its bundled small sample.
+After building an index, opt into it by setting `$env:MIRACL_INDEX_PATH = "data/miracl_index"` before starting Streamlit. Embedding the full corpus can take days depending on hardware; the builder reports progress and saves completed language shards so it can resume. Streamlit Cloud continues to use its bundled small sample.
 
 The builder batches normalized E5 vectors into memory-mapped files and stores searchable passage text and metadata in SQLite FTS5. It saves a manifest after each shard, so it can resume after an interruption. Similarity is exact and chunked, so RAM use is bounded but query time still grows with corpus size. For the 4,000-row local sample, use:
 

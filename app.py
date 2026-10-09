@@ -37,7 +37,6 @@ if not CORPUS_PATH.is_absolute():
 INDEX_PATH = Path(os.getenv("MIRACL_INDEX_PATH", ROOT / "data" / "miracl_index"))
 if not INDEX_PATH.is_absolute():
     INDEX_PATH = ROOT / INDEX_PATH
-FULL_CORPUS_PATH = ROOT / "data" / "miracl_full"
 
 
 @st.cache_resource(show_spinner="Loading multilingual embedding model...")
@@ -220,7 +219,7 @@ st.markdown(
 )
 
 manifest_path = INDEX_PATH / "manifest.json"
-use_index = manifest_path.exists()
+use_index = bool(os.getenv("MIRACL_INDEX_PATH")) and manifest_path.exists()
 index = load_index(str(INDEX_PATH), manifest_path.stat().st_mtime_ns) if use_index else None
 try:
     all_documents = [] if index else load_corpus(str(CORPUS_PATH), CORPUS_PATH.stat().st_mtime_ns)
@@ -232,9 +231,6 @@ available = index.languages if index else {
     code: sum(doc.language == code for doc in all_documents)
     for code in dict.fromkeys(doc.language for doc in all_documents)
 }
-full_shard_total = sum(1 for _ in FULL_CORPUS_PATH.rglob("docs-*.jsonl.gz")) if FULL_CORPUS_PATH.is_dir() else 0
-indexed_shards = len(index.manifest.get("shards", [])) if index else 0
-full_index_complete = bool(index and full_shard_total and indexed_shards >= full_shard_total)
 language_options = {"Query language (automatic)": "auto", "All languages": "all"}
 language_options.update({SUPPORTED_LANGUAGES[code]: code for code in available})
 corpus_name = f"Indexed MIRACL ({index.count:,} passages)" if index else f"{len(all_documents):,} passages ({CORPUS_PATH.name})"
@@ -257,16 +253,7 @@ with st.sidebar:
     st.divider()
     st.markdown("**Active corpus**")
     st.write(corpus_name)
-    st.caption("The full indexed corpus stays on this computer; Streamlit Cloud uses its small sample.")
-    if FULL_CORPUS_PATH.is_dir() and not full_index_complete:
-        progress = f"Index build progress: {indexed_shards}/{full_shard_total} corpus shards." if index else "No full-corpus index is available yet."
-        active_count = index.count if index else len(all_documents)
-        st.warning(
-            f"Full corpus is not fully indexed. {progress} This run searches {active_count:,} passages. Build or resume it with "
-            "`python scripts/build_index.py --source data/miracl_full --output data/miracl_index`.",
-            icon="⚠️",
-        )
-
+    st.caption("This computer uses the 4,000-passage local corpus; Streamlit Cloud uses the bundled demo sample.")
 search_tab, compare_tab, analysis_tab = st.tabs(["Search", "Compare methods", "Analysis"])
 
 with search_tab:
@@ -353,12 +340,6 @@ with compare_tab:
 with analysis_tab:
     st.subheader("Corpus overview")
     total = index.count if index else len(all_documents)
-    if FULL_CORPUS_PATH.is_dir() and not full_index_complete:
-        progress = f"{indexed_shards}/{full_shard_total} source shards indexed so far." if index else "No full-corpus index is available yet."
-        st.warning(
-            f"The full corpus is not fully indexed ({progress}) The active search is limited to {total:,} passages. "
-            "A local vector index is required to search the complete corpus efficiently."
-        )
     metrics = st.columns(3)
     metrics[0].metric("Passages", f"{total:,}")
     metrics[1].metric("Storage", "SQLite + mmap" if index else "JSONL sample")
